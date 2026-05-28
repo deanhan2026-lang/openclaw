@@ -629,6 +629,56 @@ describe("monitorMSTeamsProvider lifecycle", () => {
     await task;
   });
 
+  it("falls through non-feedback message.submit invokes to activity dispatch", async () => {
+    const abort = new AbortController();
+    const task = monitorMSTeamsProvider({
+      cfg: createConfig(0),
+      runtime: createRuntime(),
+      abortSignal: abort.signal,
+      conversationStore: createStores().conversationStore,
+      pollStore: createStores().pollStore,
+    });
+
+    await vi.waitFor(() => {
+      expect(registerMSTeamsHandlers).toHaveBeenCalled();
+    });
+
+    const sdkResultPromise = loadMSTeamsSdkWithAuth.mock.results[0]?.value;
+    if (!sdkResultPromise) {
+      throw new Error("expected loadMSTeamsSdkWithAuth result");
+    }
+    const app = (await sdkResultPromise).app;
+    const messageSubmitHandler = app.on.mock.calls.find(
+      (call: [string, unknown]) => call[0] === "message.submit",
+    )?.[1];
+    const activityHandler = app.on.mock.calls.find(
+      (call: [string, unknown]) => call[0] === "activity",
+    )?.[1];
+    if (typeof messageSubmitHandler !== "function" || typeof activityHandler !== "function") {
+      throw new Error("expected message.submit and activity handlers");
+    }
+
+    const activity = {
+      type: "invoke",
+      name: "message/submitAction",
+      value: { actionName: "nonFeedbackAction" },
+    };
+    const next = vi.fn(async () => {});
+    await messageSubmitHandler({ activity, next });
+    expect(next).toHaveBeenCalledTimes(1);
+
+    const registeredHandler = registerMSTeamsHandlers.mock.calls[0]?.[0];
+    if (!registeredHandler) {
+      throw new Error("expected registered Teams handler");
+    }
+    const run = vi.spyOn(registeredHandler, "run");
+    await activityHandler({ activity });
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ activity }));
+
+    abort.abort();
+    await task;
+  });
+
   it("gates poll card votes before recording them", async () => {
     const abort = new AbortController();
     const cfg = createConfig(0);
