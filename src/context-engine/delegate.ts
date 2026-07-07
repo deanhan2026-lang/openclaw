@@ -115,9 +115,9 @@ export async function delegateCompactionToRuntime(
           tokensAfter: result.result.tokensAfter,
           details: result.result.details,
           ...(result.result.sessionId ? { sessionId: result.result.sessionId } : {}),
-          // Deprecated raw locator stays populated for shipped plugin-sdk readers
-          // of the delegate result; sessionTarget is the canonical successor.
-          ...(result.result.sessionFile ? { sessionFile: result.result.sessionFile } : {}),
+          // Core reports successors only through the typed sessionTarget; the
+          // deprecated raw sessionFile field is reserved for shipped engines
+          // reporting rotation to core, and post-flip core has no file path.
           ...(resultSessionTarget ? { sessionTarget: resultSessionTarget } : {}),
         }
       : undefined,

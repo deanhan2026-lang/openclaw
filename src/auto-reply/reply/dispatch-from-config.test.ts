@@ -12608,6 +12608,10 @@ describe("sendPolicy deny — suppress delivery, not processing (#53328)", () =>
       providerOverride: "anthropic",
       modelOverride: "claude-sonnet-4.6",
     };
+    // Scope the parent-key override to this test; the describe's beforeEach does
+    // not reset loadSessionStoreEntry, so leaving it in place would resolve a
+    // stale "parent" sessionId for a sibling reusing this session key.
+    const defaultLoadSessionStoreEntry = () => sessionStoreMocks.currentEntry;
     sessionStoreMocks.loadSessionStoreEntry.mockImplementation(((params: unknown) =>
       (params as { sessionKey?: string }).sessionKey === parentSessionKey
         ? parentEntry
@@ -12643,6 +12647,7 @@ describe("sendPolicy deny — suppress delivery, not processing (#53328)", () =>
     });
     expect(result.queuedFinal).toBe(true);
     expect(firstFinalReplyPayload(dispatcher)?.text).toBe("visible parent-model reply");
+    sessionStoreMocks.loadSessionStoreEntry.mockImplementation(defaultLoadSessionStoreEntry);
   });
 
   it("honors heartbeat model overrides before Codex direct source delivery defaults", async () => {
@@ -12657,6 +12662,12 @@ describe("sendPolicy deny — suppress delivery, not processing (#53328)", () =>
           : { supported: false, reason: "codex provider only" },
       runAttempt: vi.fn(async () => ({}) as never),
     });
+    sessionStoreMocks.currentEntry = {
+      sessionId: "s1",
+      updatedAt: 0,
+      agentHarnessId: "codex",
+      sendPolicy: "allow",
+    };
     const dispatcher = createDispatcher();
     const replyResolver = vi.fn(async (_ctx: MsgContext, opts?: GetReplyOptions) => {
       expect(opts?.sourceReplyDeliveryMode).toBe("automatic");
