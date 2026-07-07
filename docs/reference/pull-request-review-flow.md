@@ -77,7 +77,7 @@ next-step checklist for the PR.
 1. Read ClawSweeper's `Rank-up moves:` and `Proof guidance:` as the action list
    for that PR. Ratings and labels are review signals, not fixed merge targets.
 2. Push the requested code or docs change, and update the PR description when
-   the problem, solution, user impact, or evidence changed.
+   the problem, solution, user impact, or evidence has changed.
 3. Add the requested proof, using evidence that matches the change.
 4. Resolve addressed review conversations yourself. Reply and leave a
    conversation open only when you need maintainer or reviewer judgment.
