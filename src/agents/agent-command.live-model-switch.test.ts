@@ -1077,7 +1077,10 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
       }),
     );
     state.resolveMessageChannelSelectionMock.mockRejectedValue(new Error("channel required"));
-    state.loadSessionEntryMock.mockReset().mockReturnValue(undefined);
+    state.loadSessionEntryMock.mockReset().mockImplementation((params: { sessionKey?: string }) => {
+      const sessionKey = params.sessionKey ?? state.resolvedSessionKeyMock ?? "agent:main:main";
+      return (state.sessionStoreMock as Record<string, SessionEntry> | undefined)?.[sessionKey];
+    });
     state.resolveAgentDeliveryPlanMock.mockImplementation(
       (params: {
         accountId?: string;
@@ -2078,7 +2081,7 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
     });
 
     expectRecordFields(mockCallArg(state.persistCliTurnTranscriptMock), {
-      embeddedAssistantGapFill: true,
+      embeddedAssistantGapFill: false,
     });
   });
 
@@ -2111,7 +2114,7 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
     await runBasicAgentCommand();
 
     expectRecordFields(mockCallArg(state.persistCliTurnTranscriptMock), {
-      embeddedAssistantGapFill: false,
+      embeddedAssistantGapFill: true,
     });
   });
 

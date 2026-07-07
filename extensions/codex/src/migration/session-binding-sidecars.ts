@@ -142,9 +142,7 @@ async function collectLegacyBindingSources(
     return source;
   };
   for (const surface of surfaces) {
-    const sidecars = surface.scan
-      ? walkSidecars(surface.root)
-      : iterateIndexedSidecars(surface, params);
+    const sidecars = surface.scan ? walkSidecars(surface.root) : iterateIndexedSidecars(surface);
     for await (const sidecarPath of sidecars) {
       const source = await addSource(sidecarPath, surface);
       if (options.firstOnly) {
@@ -158,10 +156,7 @@ async function collectLegacyBindingSources(
   };
 }
 
-async function* iterateIndexedSidecars(
-  surface: SessionSurface,
-  params: MigrationEnvironment,
-): AsyncGenerator<string> {
+async function* iterateIndexedSidecars(surface: SessionSurface): AsyncGenerator<string> {
   for (const storePath of surface.storePaths) {
     let entries: ReturnType<typeof listSessionEntries>;
     try {
@@ -169,7 +164,7 @@ async function* iterateIndexedSidecars(
     } catch {
       continue;
     }
-    for (const { sessionKey, entry } of entries) {
+    for (const { entry } of entries) {
       const sessionId = entry.sessionId?.trim();
       if (!sessionId) {
         continue;
@@ -251,17 +246,15 @@ async function collectBindingOwners(
         config: params.config,
         storeAgentIds: storeAgentIds.get(storePath),
       });
-      let transcriptPath: string;
       let legacyTranscriptPath: string;
+      let canonicalLegacyTranscriptPath: string;
       try {
         legacyTranscriptPath = resolveLegacySessionFileLocator(sessionsDir, entry, sessionId);
-        transcriptPath = await canonicalizePath(
-          resolveSessionFilePath(sessionId, entry, { sessionsDir, agentId }),
-        );
+        canonicalLegacyTranscriptPath = await canonicalizePath(legacyTranscriptPath);
       } catch {
         continue;
       }
-      if (!sourcePaths.has(transcriptPath)) {
+      if (!sourcePaths.has(canonicalLegacyTranscriptPath)) {
         continue;
       }
       const owner: LegacyBindingOwner = {
@@ -272,9 +265,10 @@ async function collectBindingOwners(
         transcriptPath: legacyTranscriptPath,
         ...(entry.agentHarnessId?.trim() ? { agentHarnessId: entry.agentHarnessId.trim() } : {}),
       };
-      const candidates = owners.get(transcriptPath) ?? new Map<string, LegacyBindingOwner>();
+      const candidates =
+        owners.get(canonicalLegacyTranscriptPath) ?? new Map<string, LegacyBindingOwner>();
       candidates.set(`${agentId}\0${sessionId}\0${sessionKey}\0${storePath}`, owner);
-      owners.set(transcriptPath, candidates);
+      owners.set(canonicalLegacyTranscriptPath, candidates);
     }
   }
   return new Map([...owners].map(([key, values]) => [key, [...values.values()]]));

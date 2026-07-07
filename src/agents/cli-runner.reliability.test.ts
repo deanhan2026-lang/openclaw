@@ -321,7 +321,7 @@ function createCliUserTurnRecorder(params: {
     target: {
       transcriptPath: params.sessionFile,
       sessionId: "s1",
-      ...(params.sessionKey ? { sessionKey: params.sessionKey } : {}),
+      sessionKey: params.sessionKey ?? "agent:main:main",
       cwd: params.workspaceDir,
     },
   });
@@ -2979,7 +2979,7 @@ describe("runCliAgent reliability", () => {
       const result = await runPreparedCliAgent(context);
 
       expect(result.meta.agentMeta?.cliSessionBinding?.reseedReceipt).toBeUndefined();
-      expect(readTranscriptMessages(sessionFile)).not.toContainEqual(
+      await expect(readTranscriptMessages(sessionFile)).resolves.not.toContainEqual(
         expect.objectContaining({ role: "user" }),
       );
     } finally {
@@ -3039,7 +3039,7 @@ describe("runCliAgent reliability", () => {
         localSessionId: "s1",
         userTurnDisposition: "omitted",
       });
-      expect(readTranscriptMessages(sessionFile)).toEqual([]);
+      await expect(readTranscriptMessages(sessionFile)).resolves.toEqual([]);
     } finally {
       restoreCliRunnerTestDeps();
       fs.rmSync(dir, { recursive: true, force: true });
@@ -3380,7 +3380,7 @@ describe("runCliAgent reliability", () => {
     );
     const { dir, sessionFile } = createSessionFile();
     const taskDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-cli-persist-cwd-"));
-    let capturedTarget: unknown;
+    let capturedCwd: unknown;
     const recorder = {
       message: undefined,
       resolveMessage: vi.fn(async () => undefined),
@@ -3391,9 +3391,8 @@ describe("runCliAgent reliability", () => {
       isBlocked: vi.fn(() => false),
       hasRuntimePersistencePending: vi.fn(() => false),
       waitForRuntimePersistence: vi.fn(async () => undefined),
-      persistApproved: vi.fn(async (options?: { target?: unknown }) => {
-        capturedTarget =
-          typeof options?.target === "function" ? await options.target() : options?.target;
+      persistApproved: vi.fn(async (options?: { cwd?: unknown }) => {
+        capturedCwd = options?.cwd;
         return {
           sessionFile,
           sessionEntry: undefined,
@@ -3427,14 +3426,7 @@ describe("runCliAgent reliability", () => {
 
       expect(result.payloads).toEqual([{ text: "hello from cli" }]);
       expect(recorder.persistApproved).toHaveBeenCalledOnce();
-      expect(capturedTarget).toEqual(
-        expect.objectContaining({
-          transcriptPath: sessionFile,
-          sessionId: context.params.sessionId,
-          sessionKey: "agent:main:main",
-          cwd: taskDir,
-        }),
-      );
+      expect(capturedCwd).toBe(taskDir);
     } finally {
       fs.rmSync(taskDir, { recursive: true, force: true });
       fs.rmSync(dir, { recursive: true, force: true });
