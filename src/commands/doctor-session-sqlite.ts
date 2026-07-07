@@ -11,6 +11,7 @@ import {
 import { resolveSqliteTargetFromSessionStorePath } from "../config/sessions/session-sqlite-target.js";
 import { parseSqliteSessionFileMarker } from "../config/sessions/sqlite-marker.js";
 import { normalizeStoreSessionKey } from "../config/sessions/store-entry.js";
+import { normalizeSessionEntryDelivery } from "../config/sessions/store-load.js";
 import {
   resolveAgentSessionStoreTargetsSync,
   resolveAllAgentSessionStoreTargetsSync,
@@ -323,7 +324,9 @@ function readLegacySessionRecords(
       continue;
     }
     records.push({
-      entry: value,
+      // Import is the migration boundary: repair legacy delivery/route shapes
+      // here because the SQLite runtime read path assumes canonical entries.
+      entry: normalizeSessionEntryDelivery(value),
       sessionKey,
       transcriptPath: resolveLegacyTranscriptPath(target, value),
     });

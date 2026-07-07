@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import { TextDecoder } from "node:util";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
+import { normalizeLoadedFileEntry, type FileEntry } from "../agents/sessions/session-manager.js";
 import type { TranscriptEvent } from "../config/sessions/session-accessor.js";
 import { resolveSqliteTargetFromSessionStorePath } from "../config/sessions/session-sqlite-target.js";
 import type { SessionStoreTarget } from "../config/sessions/targets.js";
@@ -77,7 +78,9 @@ export function createTranscriptEventReader(
     for (const line of iterateJsonlLinesSync(transcriptPath)) {
       const parsed = parseJsonlLine(line);
       if (parsed) {
-        append(parsed as TranscriptEvent);
+        // Import is the migration boundary: repair legacy JSONL message shapes
+        // here because the SQLite runtime read path assumes canonical rows.
+        append(normalizeLoadedFileEntry(parsed as FileEntry) as TranscriptEvent);
       }
     }
   };
@@ -91,7 +94,7 @@ export function createTranscriptEventPrefixReader(
       for (const line of iterateJsonlLinesSync(transcriptPath)) {
         const parsed = parseJsonlLine(line);
         if (parsed) {
-          append(parsed as TranscriptEvent);
+          append(normalizeLoadedFileEntry(parsed as FileEntry) as TranscriptEvent);
         }
       }
     } catch {

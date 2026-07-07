@@ -117,6 +117,44 @@ describe("runDoctorSessionSqlite", () => {
     }
   });
 
+  it("repairs legacy message and route shapes at the import boundary", async () => {
+    const store = createLegacyStore({
+      entryOverrides: {
+        route: "stale-custom-slot",
+        deliveryContext: { channel: "telegram", to: "123" },
+      },
+      transcriptLines: [
+        '{"type":"session","sessionId":"session-1"}',
+        '{"type":"message","id":"m1","parentId":null,"message":{"role":"assistant","content":"legacy string"}}',
+      ],
+    });
+
+    const report = await runDoctorSessionSqlite({
+      env: store.env,
+      mode: "import",
+      store: store.storePath,
+    });
+
+    expect(report.totals).toMatchObject({ importedEntries: 1, issues: 0 });
+    const imported = loadExactSqliteSessionEntry({
+      agentId: "main",
+      sessionKey: "agent:main:main",
+      storePath: store.storePath,
+    });
+    // The SQLite runtime does no read repair, so import must store canonical shapes.
+    expect(typeof imported?.entry.route).not.toBe("string");
+    const events = loadSqliteTranscriptEventsSync({
+      agentId: "main",
+      sessionId: "session-1",
+      sessionKey: "agent:main:main",
+      storePath: store.storePath,
+    });
+    const message = events.find((event) => (event as { type?: string }).type === "message") as {
+      message?: { content?: unknown };
+    };
+    expect(message?.message?.content).toEqual([{ type: "text", text: "legacy string" }]);
+  });
+
   it("imports and validates legacy sessions idempotently", async () => {
     const store = createLegacyStore();
 
@@ -1118,7 +1156,12 @@ describe("runDoctorSessionSqlite", () => {
 });
 
 function createLegacyStore(
-  params: { agentDirName?: string; customStore?: boolean; transcriptLines?: string[] } = {},
+  params: {
+    agentDirName?: string;
+    customStore?: boolean;
+    entryOverrides?: Record<string, unknown>;
+    transcriptLines?: string[];
+  } = {},
 ): TestStore {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-doctor-session-sqlite-"));
   const stateDir = path.join(tempDir, "state");
@@ -1143,6 +1186,7 @@ function createLegacyStore(
           sessionId: "session-1",
           sessionStartedAt: 1000,
           updatedAt: 2000,
+          ...params.entryOverrides,
         },
       },
       null,

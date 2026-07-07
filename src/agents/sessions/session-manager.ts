@@ -1015,7 +1015,13 @@ function parseJsonlEntries(content: string): FileEntry[] {
   return entries;
 }
 
-function normalizeLoadedFileEntry(entry: FileEntry): FileEntry {
+/**
+ * Repairs legacy JSONL message shapes (string assistant/toolResult content) into
+ * canonical block arrays. Every legacy-JSONL ingress point — file-era transcript
+ * reads and the doctor SQLite import — must apply this so the SQLite store only
+ * ever holds canonical rows; the SQLite read path does no repair.
+ */
+export function normalizeLoadedFileEntry(entry: FileEntry): FileEntry {
   if (!isJsonRecord(entry) || entry.type !== "message" || !isJsonRecord(entry.message)) {
     return entry;
   }
