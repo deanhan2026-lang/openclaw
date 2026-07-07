@@ -1364,7 +1364,7 @@ describe("initSessionState RawBody", () => {
     expect(result.sessionEntry.label).toBe("Other");
     expect(result.sessionEntry.displayName).toBe("Dashboard Chat");
 
-    const store = JSON.parse(await fs.readFile(storePath, "utf-8")) as Record<
+    const store = readSessionStoreFast(storePath) as Record<
       string,
       { label?: string; displayName?: string }
     >;
@@ -4795,7 +4795,7 @@ describe("persistSessionUsageUpdate", () => {
       contextTokensUsed: 200_000,
     });
 
-    const stored = JSON.parse(await fs.readFile(storePath, "utf-8"));
+    const stored = readSessionStoreFast(storePath);
     expect(stored[sessionKey].totalTokens).toBe(148_874);
     expect(stored[sessionKey].totalTokensFresh).toBe(false);
     expect(stored[sessionKey].inputTokens).toBe(12);

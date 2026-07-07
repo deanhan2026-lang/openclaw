@@ -206,16 +206,7 @@ vi.mock("../../agents/subagent-registry.js", () => ({
 const warnPrivateFinalSpy = vi.hoisted(() => vi.fn());
 vi.mock("./private-message-tool-final.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./private-message-tool-final.js")>();
-  return {
-    ...actual,
-    shouldWarnAboutPrivateMessageToolFinal: (params: never) => {
-      console.error("DBG shouldWarn params", JSON.stringify(params));
-      const r = actual.shouldWarnAboutPrivateMessageToolFinal(params);
-      console.error("DBG shouldWarn result", r);
-      return r;
-    },
-    warnPrivateMessageToolFinal: warnPrivateFinalSpy,
-  };
+  return { ...actual, warnPrivateMessageToolFinal: warnPrivateFinalSpy };
 });
 
 import { runReplyAgent } from "./agent-runner.js";
@@ -3428,6 +3419,12 @@ describe("runReplyAgent private message_tool_only final warning (#85714)", () =>
         blockReplyBreak: "message_end",
       },
     } as unknown as FollowupRun;
+
+    // Seeding the SQLite session entry above resolves the runtime config
+    // (getRuntimeConfig) and pins an empty `{}` snapshot; leaving it in place
+    // would make resolveQueuedReplyExecutionConfig override the run's
+    // visibleReplies=message_tool config and mis-resolve delivery to automatic.
+    clearRuntimeConfigSnapshot();
 
     await runReplyAgent({
       commandBody: "hello",
