@@ -62,7 +62,7 @@ on the PR:
 asking again before the requested changes are present just adds queue noise.
 
 If ClawSweeper leaves review conversations, treat them like normal review
-feedback and use the follow-up flow below.
+feedback and use the follow-up checklist below.
 
 If a human contributor or maintainer has taken over the PR and is actively
 working on it, do not summon ClawSweeper or otherwise work on the PR at the same
