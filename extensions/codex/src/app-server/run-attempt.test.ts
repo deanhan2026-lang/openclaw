@@ -2246,6 +2246,7 @@ describe("runCodexAppServerAttempt", () => {
     expect(turnStartParams?.input).toEqual([
       { type: "text", text: "queued context\n\nhello\n\ntail context", text_elements: [] },
     ]);
+    expect(JSON.stringify(turnStartParams)).not.toContain("previous turn");
     const [llmInputPayload] = mockCall(llmInput, "llm_input") as [
       { historyMessages?: unknown[]; prompt?: string },
       unknown,
