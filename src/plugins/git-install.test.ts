@@ -129,6 +129,21 @@ describe("parseGitPluginSpec", () => {
     expect(parsed.ref).toBe("feature/foo");
     expect(parsed.label).toBe("git@github.com:acme/demo");
   });
+
+  it("resolves home-relative local specs against OPENCLAW_HOME", () => {
+    const previous = process.env.OPENCLAW_HOME;
+    process.env.OPENCLAW_HOME = "/tmp/openclaw-home";
+    try {
+      const parsed = expectParsedGitSpec("git:~/plugins/demo.git");
+      expect(parsed.url).toBe(path.resolve("/tmp/openclaw-home/plugins/demo.git"));
+    } finally {
+      if (previous === undefined) {
+        delete process.env.OPENCLAW_HOME;
+      } else {
+        process.env.OPENCLAW_HOME = previous;
+      }
+    }
+  });
 });
 
 describe("isImmutableGitCommitRef", () => {

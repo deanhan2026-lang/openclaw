@@ -3,6 +3,11 @@ import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/st
 import { theme } from "../../packages/terminal-core/src/theme.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { HOOK_INSTALL_ERROR_CODE } from "../hooks/install.js";
+import {
+  parseNpmPackPrefixPath,
+  parseNpmPrefixSpec,
+  resolveFileNpmSpecToLocalPath,
+} from "../infra/plugin-install-specs.js";
 import type { PluginKind } from "../plugins/plugin-kind.types.js";
 import { loadPluginMetadataSnapshot } from "../plugins/plugin-metadata-snapshot.js";
 import { applyExclusiveSlotSelection } from "../plugins/slots.js";
@@ -64,31 +69,7 @@ function buildSlotSelectionRegistry(
   };
 }
 
-export function resolveFileNpmSpecToLocalPath(
-  raw: string,
-): { ok: true; path: string } | { ok: false; error: string } | null {
-  const trimmed = raw.trim();
-  if (!normalizeLowercaseStringOrEmpty(trimmed).startsWith("file:")) {
-    return null;
-  }
-  const rest = trimmed.slice("file:".length);
-  if (!rest) {
-    return { ok: false, error: "unsupported file: spec: missing path" };
-  }
-  if (rest.startsWith("///")) {
-    return { ok: true, path: rest.slice(2) };
-  }
-  if (rest.startsWith("//localhost/")) {
-    return { ok: true, path: rest.slice("//localhost".length) };
-  }
-  if (rest.startsWith("//")) {
-    return {
-      ok: false,
-      error: 'unsupported file: URL host (expected "file:<path>" or "file:///abs/path")',
-    };
-  }
-  return { ok: true, path: rest };
-}
+export { parseNpmPackPrefixPath, parseNpmPrefixSpec, resolveFileNpmSpecToLocalPath };
 
 export function applySlotSelectionForPlugin(
   config: OpenClawConfig,
@@ -218,20 +199,4 @@ export function logSlotWarnings(warnings: string[], runtime: RuntimeEnv = defaul
   for (const warning of warnings) {
     runtime.log(theme.warn(warning));
   }
-}
-
-export function parseNpmPrefixSpec(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!normalizeLowercaseStringOrEmpty(trimmed).startsWith("npm:")) {
-    return null;
-  }
-  return trimmed.slice("npm:".length).trim();
-}
-
-export function parseNpmPackPrefixPath(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!normalizeLowercaseStringOrEmpty(trimmed).startsWith("npm-pack:")) {
-    return null;
-  }
-  return trimmed.slice("npm-pack:".length).trim();
 }
