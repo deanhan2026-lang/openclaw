@@ -105,6 +105,7 @@ const REPLAY_SAFE_TOOL_NAMES = new Set([
   "search",
   "sessions_history",
   "sessions_list",
+  "sessions_search",
   "tool_describe",
   "tool_search",
   "update_plan",

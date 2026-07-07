@@ -29,7 +29,9 @@ export type SessionTranscriptUpdate = SessionTranscriptUpdateFields & {
 };
 
 /** Internal transcript update that may identify a transcript without a file path. */
-export type InternalSessionTranscriptUpdate = SessionTranscriptUpdateFields;
+export type InternalSessionTranscriptUpdate = SessionTranscriptUpdateFields & {
+  mutation?: "append" | "replace";
+};
 
 type SessionTranscriptListener = (update: SessionTranscriptUpdate) => void;
 type InternalSessionTranscriptListener = (update: InternalSessionTranscriptUpdate) => void;
@@ -92,6 +94,7 @@ function normalizeSessionTranscriptUpdate(
           message: update.message,
           messageId: update.messageId,
           messageSeq: update.messageSeq,
+          mutation: update.mutation,
         };
   const trimmed = normalizeOptionalString(normalized.sessionFile);
   const target = normalizeUpdateTarget(normalized);
@@ -113,6 +116,9 @@ function normalizeSessionTranscriptUpdate(
       ? { messageId: normalizeOptionalString(normalized.messageId) }
       : {}),
     ...(messageSeq !== undefined ? { messageSeq } : {}),
+    ...(normalized.mutation === "append" || normalized.mutation === "replace"
+      ? { mutation: normalized.mutation }
+      : {}),
   };
 }
 

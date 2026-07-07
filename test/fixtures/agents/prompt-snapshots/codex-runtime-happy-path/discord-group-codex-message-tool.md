@@ -97,6 +97,7 @@
     "gateway",
     "sessions_list",
     "sessions_history",
+    "sessions_search",
     "sessions_send",
     "subagents",
     "session_status",
@@ -227,20 +228,20 @@ This is the deterministic model-bound layer stack OpenClaw can snapshot for the 
     "roughTokens": 0
   },
   "dynamicToolsJson": {
-    "chars": 51940,
-    "roughTokens": 12985
+    "chars": 52620,
+    "roughTokens": 13155
   },
   "openClawDeveloperInstructions": {
-    "chars": 3045,
-    "roughTokens": 762
+    "chars": 3062,
+    "roughTokens": 766
   },
   "totalTextOnly": {
-    "chars": 27570,
-    "roughTokens": 6893
+    "chars": 27587,
+    "roughTokens": 6897
   },
   "totalWithDynamicToolsJson": {
-    "chars": 79512,
-    "roughTokens": 19878
+    "chars": 80209,
+    "roughTokens": 20053
   },
   "userInputText": {
     "chars": 1442,
@@ -427,7 +428,7 @@ Approval policy is currently never. Do not provide the `sandbox_permissions` for
 ````text
 You are a personal agent running inside OpenClaw. OpenClaw has dynamic tools for OpenClaw-owned messaging, cron, sessions, media, gateway, and nodes.
 
-Deferred searchable OpenClaw dynamic tools available: cron, gateway, nodes, session_status, sessions_history, sessions_list, sessions_send, subagents, tts, web_fetch, web_search. Use `tool_search` to load exact callable specs before use.
+Deferred searchable OpenClaw dynamic tools available: cron, gateway, nodes, session_status, sessions_history, sessions_list, sessions_search, sessions_send, subagents, tts, web_fetch, web_search. Use `tool_search` to load exact callable specs before use.
 
 Use Codex native `spawn_agent` for Codex subagents. Use OpenClaw `sessions_spawn` only for OpenClaw or ACP delegation.
 
@@ -559,6 +560,7 @@ Full JSON: `codex-dynamic-tools.discord-group.json`
   "gateway",
   "sessions_list",
   "sessions_history",
+  "sessions_search",
   "sessions_send",
   "subagents",
   "session_status",

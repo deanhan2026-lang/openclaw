@@ -253,7 +253,9 @@ export async function withSessionTranscriptWriteLock<T>(
         appendMessage: (options) =>
           transaction.appendMessage({
             ...options,
-            sessionId: params.sessionId,
+            agentId: storageTarget.agentId,
+            sessionId: storageTarget.sessionId,
+            sessionKey: storageTarget.sessionKey,
           }),
         publishUpdate: async (update) => {
           queuedUpdates.push(update ? { ...update } : undefined);

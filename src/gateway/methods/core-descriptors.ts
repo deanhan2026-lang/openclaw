@@ -254,6 +254,7 @@ export const CORE_GATEWAY_METHOD_SPECS: readonly CoreGatewayMethodSpec[] = [
   { name: "controlUi.githubPreview", scope: "operator.read" },
   // Additive discovery methods append here so older clients keep stable indices.
   { name: "system.info", scope: "operator.read" },
+  { name: "sessions.search", scope: "operator.read" },
 ] as const;
 
 const CORE_GATEWAY_METHOD_SPEC_BY_NAME: ReadonlyMap<string, CoreGatewayMethodSpec> = new Map(

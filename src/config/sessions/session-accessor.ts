@@ -1932,10 +1932,15 @@ export async function appendTranscriptMessage<TMessage>(
   options: TranscriptMessageAppendOptions<TMessage>,
 ): Promise<TranscriptMessageAppendResult<TMessage> | undefined> {
   const transcript = await resolveTranscriptAccess(scope);
+  const agentId = transcript.target?.agentId;
+  const sessionId = transcript.target?.sessionId ?? scope.sessionId;
+  const sessionKey = transcript.target?.sessionKey ?? scope.sessionKey;
   return await appendSessionTranscriptMessage({
     transcriptPath: transcript.sessionFile,
     message: options.message,
-    ...(scope.sessionId ? { sessionId: scope.sessionId } : {}),
+    ...(agentId ? { agentId } : {}),
+    ...(sessionId ? { sessionId } : {}),
+    ...(sessionKey ? { sessionKey } : {}),
     ...(options.cwd ? { cwd: options.cwd } : {}),
     ...(options.config ? { config: options.config } : {}),
     ...(options.idempotencyLookup ? { idempotencyLookup: options.idempotencyLookup } : {}),
@@ -2354,7 +2359,9 @@ async function appendTranscriptTurnMessages(
       const result = await appendMessage({
         transcriptPath: target.sessionFile,
         message: append.message,
+        ...(target.agentId ? { agentId: target.agentId } : {}),
         ...(target.sessionId ? { sessionId: target.sessionId } : {}),
+        ...(target.sessionKey ? { sessionKey: target.sessionKey } : {}),
         ...((append.cwd ?? options.cwd) ? { cwd: append.cwd ?? options.cwd } : {}),
         ...((append.config ?? options.config) ? { config: append.config ?? options.config } : {}),
         ...(append.idempotencyLookup ? { idempotencyLookup: append.idempotencyLookup } : {}),

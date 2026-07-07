@@ -82,6 +82,57 @@ export interface SchemaMeta {
   updated_at: number;
 }
 
+export interface SessionTranscriptFiles {
+  indexed_bytes: Generated<number>;
+  leaf_id: string | null;
+  mtime: Generated<number>;
+  path: string;
+  session_id: string;
+  session_key: string;
+  size: Generated<number>;
+  updated_at: number;
+}
+
+export interface SessionTranscriptFts {
+  message_id: string | null;
+  role: string | null;
+  session_id: string | null;
+  session_key: string | null;
+  text: string | null;
+  timestamp: string | null;
+}
+
+export interface SessionTranscriptFtsConfig {
+  k: string;
+  v: string | null;
+}
+
+export interface SessionTranscriptFtsContent {
+  c0: string | null;
+  c1: string | null;
+  c2: string | null;
+  c3: string | null;
+  c4: string | null;
+  c5: string | null;
+  id: Generated<number>;
+}
+
+export interface SessionTranscriptFtsData {
+  block: Uint8Array | null;
+  id: Generated<number>;
+}
+
+export interface SessionTranscriptFtsDocsize {
+  id: Generated<number>;
+  sz: Uint8Array | null;
+}
+
+export interface SessionTranscriptFtsIdx {
+  pgno: string | null;
+  segid: string;
+  term: string;
+}
+
 export interface DB {
   auth_profile_state: AuthProfileState;
   auth_profile_store: AuthProfileStore;
@@ -92,4 +143,11 @@ export interface DB {
   memory_index_sources: MemoryIndexSources;
   memory_index_state: MemoryIndexState;
   schema_meta: SchemaMeta;
+  session_transcript_files: SessionTranscriptFiles;
+  session_transcript_fts: SessionTranscriptFts;
+  session_transcript_fts_config: SessionTranscriptFtsConfig;
+  session_transcript_fts_content: SessionTranscriptFtsContent;
+  session_transcript_fts_data: SessionTranscriptFtsData;
+  session_transcript_fts_docsize: SessionTranscriptFtsDocsize;
+  session_transcript_fts_idx: SessionTranscriptFtsIdx;
 }
