@@ -4899,7 +4899,7 @@ export async function recordSqliteInboundSessionMeta(params: {
   const createIfMissing = params.createIfMissing ?? true;
   return await patchSqliteSessionEntry(
     { sessionKey: params.sessionKey, storePath: params.storePath },
-    (entry, context) =>
+    (_entry, context) =>
       deriveSessionMetaPatch({
         ctx: params.ctx,
         sessionKey: params.sessionKey,
@@ -4932,7 +4932,7 @@ export async function updateSqliteSessionLastRoute(params: {
   const createIfMissing = params.createIfMissing ?? true;
   return await patchSqliteSessionEntry(
     { sessionKey: params.sessionKey, storePath: params.storePath },
-    (entry, context) =>
+    (_entry, context) =>
       deriveLastRoutePatch({
         channel: params.channel,
         to: params.to,

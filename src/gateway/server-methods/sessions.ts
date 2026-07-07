@@ -2393,11 +2393,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       if (!expectedSessionId || entry?.sessionId === expectedSessionId) {
         return true;
       }
-      return (
-        entry?.sessionId === undefined &&
-        expectedLifecycleRevision !== undefined &&
-        expectedLifecycleRevisionMatches(entry)
-      );
+      return false;
     };
     const respondSessionChanged = () => {
       respond(

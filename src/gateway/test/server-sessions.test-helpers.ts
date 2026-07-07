@@ -707,6 +707,7 @@ export async function directSessionReq<TPayload = unknown>(
     context: {
       broadcastToConnIds: vi.fn(),
       chatAbortControllers: new Map(),
+      chatQueuedTurns: new Map(),
       dedupe: new Map(),
       getSessionEventSubscriberConnIds: () => new Set<string>(),
       loadGatewayModelCatalog: async () => agentDiscoveryMock.models,

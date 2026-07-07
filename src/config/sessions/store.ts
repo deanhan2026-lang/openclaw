@@ -8,13 +8,6 @@ import { writeTextAtomic } from "../../infra/json-files.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { emitSessionTranscriptUpdate } from "../../sessions/transcript-events.js";
 import { createLazyRuntimeModule } from "../../shared/lazy-runtime.js";
-import {
-  deliveryContextFromChannelRoute,
-  deliveryContextFromSession,
-  mergeDeliveryContext,
-  normalizeDeliveryContext,
-  normalizeSessionDeliveryFields,
-} from "../../utils/delivery-context.shared.js";
 import type { DeliveryContext } from "../../utils/delivery-context.types.js";
 import { getFileStatSnapshot } from "../cache-utils.js";
 import type { OpenClawConfig } from "../types.openclaw.js";
@@ -128,15 +121,6 @@ const loadSessionArchiveRuntime = createLazyRuntimeModule(
 const loadTrajectoryCleanupRuntime = createLazyRuntimeModule(
   () => import("../../trajectory/cleanup.js"),
 );
-
-function removeThreadFromDeliveryContext(context?: DeliveryContext): DeliveryContext | undefined {
-  if (!context || context.threadId == null) {
-    return context;
-  }
-  const next: DeliveryContext = { ...context };
-  delete next.threadId;
-  return next;
-}
 
 export function readSessionUpdatedAt(params: {
   storePath: string;

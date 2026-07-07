@@ -354,11 +354,9 @@ test("sessions.create reset-in-place persists the returned worktree cwd", async 
     const worktree = created.payload?.worktree;
     worktreeId = worktree?.id;
     expect(created.payload?.entry.spawnedCwd).toBe(worktree?.path);
-    const store = JSON.parse(await fs.readFile(storePath, "utf8")) as Record<
-      string,
-      { spawnedCwd?: string }
-    >;
-    expect(store["agent:main:main"]?.spawnedCwd).toBe(worktree?.path);
+    expect(loadSessionEntry({ sessionKey: "agent:main:main", storePath })?.spawnedCwd).toBe(
+      worktree?.path,
+    );
 
     // A later plain New Chat on the same main session must leave the worktree: cwd clears
     // and the (clean) session worktree is lossless-removed rather than left orphaned.
@@ -972,6 +970,15 @@ test("sessions.create forks the parent transcript into the new session", async (
       }),
     },
   });
+  await seedSessionTranscript({
+    sessionId: parent.sessionId,
+    sessionKey: "agent:main:main",
+    storePath,
+    messages: [
+      { role: "user", content: "before compaction" },
+      { role: "assistant", content: [{ type: "text", text: "working on it" }] },
+    ],
+  });
 
   const created = await directSessionReq<{
     key?: string;
@@ -999,21 +1006,41 @@ test("sessions.create forks the parent transcript into the new session", async (
     created.payload?.entry?.sessionFile,
     "forked session file",
   );
-  const readMessages = async (sessionFile: string) =>
-    (await fs.readFile(sessionFile, "utf-8"))
-      .trim()
-      .split(/\r?\n/)
-      .map((line) => JSON.parse(line) as { type?: string; message?: unknown })
-      .filter((entry) => entry.type === "message")
+  const readMessages = async (scope: {
+    sessionFile?: string;
+    sessionId: string;
+    sessionKey: string;
+    storePath: string;
+  }) =>
+    (await loadTranscriptEvents(scope))
+      .filter((entry): entry is { type: "message"; message: unknown } => {
+        return (
+          !!entry &&
+          typeof entry === "object" &&
+          "type" in entry &&
+          entry.type === "message" &&
+          "message" in entry
+        );
+      })
       .map((entry) => entry.message);
-  expect(await readMessages(forkedSessionFile)).toEqual(await readMessages(parent.sessionFile));
+  const forkedSessionId = requireNonEmptyString(created.payload?.sessionId, "forked session id");
+  expect(
+    await readMessages({
+      sessionFile: forkedSessionFile,
+      sessionId: forkedSessionId,
+      sessionKey: created.payload?.key ?? "",
+      storePath,
+    }),
+  ).toEqual(
+    await readMessages({
+      sessionId: parent.sessionId,
+      sessionKey: "agent:main:main",
+      storePath,
+    }),
+  );
 
-  const stored = JSON.parse(await fs.readFile(storePath, "utf-8")) as Record<
-    string,
-    { sessionId?: string; sessionFile?: string; forkedFromParent?: boolean }
-  >;
   const key = requireNonEmptyString(created.payload?.key, "forked session key");
-  expect(stored[key]).toMatchObject({
+  expect(loadSessionEntry({ sessionKey: key, storePath })).toMatchObject({
     sessionId: created.payload?.sessionId,
     sessionFile: forkedSessionFile,
     forkedFromParent: true,
@@ -1085,6 +1112,7 @@ test("sessions.create rejects fork while the parent session is active", async ()
 test("sessions.create resolves an agent-qualified fork from the parent store", async () => {
   const { dir } = await createSessionStoreDir();
   const storeTemplate = path.join(dir, "{agentId}", "sessions.json");
+  const mainStorePath = storeTemplate.replace("{agentId}", "main");
   const workStorePath = storeTemplate.replace("{agentId}", "work");
   const workDir = path.dirname(workStorePath);
   testState.sessionStorePath = storeTemplate;
@@ -1100,9 +1128,20 @@ test("sessions.create resolves an agent-qualified fork from the parent store", a
         main: sessionStoreEntry(parent.sessionId, { sessionFile: parent.sessionFile }),
       },
     });
+    await seedSessionTranscript({
+      agentId: "work",
+      sessionId: parent.sessionId,
+      sessionKey: "agent:work:main",
+      storePath: workStorePath,
+      messages: [
+        { role: "user", content: "before compaction" },
+        { role: "assistant", content: [{ type: "text", text: "working on it" }] },
+      ],
+    });
 
     const created = await directSessionReq<{
       key?: string;
+      sessionId?: string;
       entry?: {
         parentSessionKey?: string;
         sessionFile?: string;
@@ -1121,7 +1160,24 @@ test("sessions.create resolves an agent-qualified fork from the parent store", a
       created.payload?.entry?.sessionFile,
       "agent-qualified forked session file",
     );
-    await expect(fs.readFile(forkedSessionFile, "utf-8")).resolves.toContain("before compaction");
+    await expect(
+      loadTranscriptEvents({
+        sessionFile: forkedSessionFile,
+        sessionId: requireNonEmptyString(
+          created.payload?.sessionId,
+          "agent-qualified forked session id",
+        ),
+        sessionKey: created.payload?.key ?? "",
+        storePath: mainStorePath,
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.objectContaining({ content: "before compaction" }),
+          type: "message",
+        }),
+      ]),
+    );
   } finally {
     testState.sessionStorePath = undefined;
     testState.sessionConfig = undefined;

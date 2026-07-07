@@ -12,7 +12,7 @@ import {
 } from "../acp/runtime/session-meta.js";
 import { getRegistryWorktree } from "../agents/worktrees/registry.js";
 import { managedWorktrees } from "../agents/worktrees/service.js";
-import { loadSessionEntry } from "../config/sessions/session-accessor.js";
+import { loadSessionEntry, replaceSessionEntry } from "../config/sessions/session-accessor.js";
 import {
   beginSessionWorkAdmission,
   runExclusiveSessionLifecycleMutation,
@@ -353,44 +353,19 @@ test("sessions.delete rechecks its expected id before interrupting replacement w
   }
 });
 
-test("sessions.delete accepts a matching lifecycle revision for a non-resumable stub", async () => {
-  const sessionKey = "agent:main:cron:cleanup";
-  const lifecycleRevision = "run-revision";
-  const updatedAt = 1_737_600_000_000;
-  await createSessionStoreDir();
-  await writeSessionStore({
-    entries: {
-      [sessionKey]: sessionStoreEntry("discarded-before-persist", {
-        sessionId: undefined,
-        lifecycleRevision,
-        updatedAt,
-      }),
-    },
-  });
-
-  const deleted = await expectSessionDeleteSucceeds({
-    key: sessionKey,
-    expectedSessionId: "in-memory-run-id",
-    expectedLifecycleRevision: lifecycleRevision,
-    expectedSessionUpdatedAt: updatedAt,
-  });
-
-  expect(deleted.payload?.deleted).toBe(true);
-});
-
-test("sessions.delete rejects an ID-less replacement with the same updated-at timestamp", async () => {
+test("sessions.delete rejects a replacement with the same updated-at timestamp", async () => {
   const sessionKey = "agent:main:cron:cleanup";
   const updatedAt = 1_737_600_000_000;
   const { storePath } = await createSessionStoreDir();
-  await writeSessionStore({
-    entries: {
-      [sessionKey]: sessionStoreEntry("discarded-before-persist", {
-        sessionId: undefined,
+  await replaceSessionEntry(
+    { sessionKey, storePath },
+    {
+      ...sessionStoreEntry("replacement-run", {
         lifecycleRevision: "replacement-revision",
         updatedAt,
       }),
     },
-  });
+  );
   let interrupted = false;
   const admission = await beginSessionWorkAdmission({
     scope: storePath,
@@ -413,6 +388,7 @@ test("sessions.delete rejects an ID-less replacement with the same updated-at ti
     expect(interrupted).toBe(false);
     expect(loadSessionEntry({ sessionKey, storePath })).toMatchObject({
       lifecycleRevision: "replacement-revision",
+      sessionId: "replacement-run",
       updatedAt,
     });
   } finally {
