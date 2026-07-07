@@ -12,8 +12,8 @@ This page explains the review flow after an OpenClaw pull request is open: what
 Barnacle and ClawSweeper do, how to improve the PR from their feedback, and what
 to check when nothing appears to happen.
 
-Barnacle and ClawSweeper help maintainers keep the queue usable. They do not
-replace maintainer judgment.
+Barnacle and ClawSweeper help maintainers keep the review queue usable. They do
+not replace maintainer judgment.
 
 ## Barnacle
 
