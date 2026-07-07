@@ -14,7 +14,7 @@ import {
   resetRunCronIsolatedAgentTurnHarness,
   runEmbeddedAgentMock,
   runWithModelFallbackMock,
-  replaceSessionEntryMock,
+  patchSessionEntryMock,
 } from "./run.test-harness.js";
 
 const runCronIsolatedAgentTurn = await loadRunCronIsolatedAgentTurn();
@@ -118,7 +118,6 @@ describe("runCronIsolatedAgentTurn — LiveSessionModelSwitchError retry (#57206
         isNewSession: true,
       }),
     );
-    replaceSessionEntryMock.mockResolvedValue(undefined);
     logWarnMock.mockReturnValue(undefined);
   });
 
@@ -186,7 +185,7 @@ describe("runCronIsolatedAgentTurn — LiveSessionModelSwitchError retry (#57206
 
     expect(result.status).toBe("error");
     expect(String(result.error)).toContain("transient network error");
-    expect(replaceSessionEntryMock).toHaveBeenCalled();
+    expect(patchSessionEntryMock).toHaveBeenCalled();
     expect(cronSession.sessionEntry.model).toBe("claude-sonnet-4-6");
     expect(cronSession.sessionEntry.modelProvider).toBe("anthropic");
   });

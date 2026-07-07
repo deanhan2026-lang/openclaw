@@ -64,6 +64,7 @@ export const clearCliSessionMock = createMock();
 export const setCliSessionBindingMock = createMock();
 export const loadSessionEntryMock = createMock();
 export const replaceSessionEntryMock = createMock();
+export const patchSessionEntryMock = createMock();
 export const resolveCronSessionMock = createMock();
 export const logWarnMock = createMock();
 export const countActiveDescendantRunsMock = createMock();
@@ -324,6 +325,7 @@ vi.mock("../../config/sessions/session-accessor.js", async () => ({
     "../../config/sessions/session-accessor.js",
   )),
   replaceSessionEntry: replaceSessionEntryMock,
+  patchSessionEntry: patchSessionEntryMock,
 }));
 
 vi.mock("../delivery-plan.js", async () => ({
@@ -378,7 +380,7 @@ export function makeCronSessionEntry(overrides?: Record<string, unknown>): CronS
 }
 
 export function makeCronSession(overrides?: Record<string, unknown>): CronSession {
-  return {
+  const session = {
     storePath: "/tmp/store.json",
     store: {},
     sessionEntry: makeCronSessionEntry(),
@@ -388,6 +390,13 @@ export function makeCronSession(overrides?: Record<string, unknown>): CronSessio
     isNewSession: true,
     ...overrides,
   } as CronSession;
+  // Real resolveCronSession stamps the run's lifecycleRevision onto the live
+  // sessionEntry so the accessor-backed persist path can prove ownership on
+  // later writes. Mirror that here unless a test seeds its own revision.
+  if (session.sessionEntry.lifecycleRevision === undefined) {
+    session.sessionEntry.lifecycleRevision = session.lifecycleRevision;
+  }
+  return session;
 }
 
 function makeDefaultModelFallbackResult() {
@@ -691,12 +700,53 @@ function resetRunSessionMocks(): void {
   loadSessionEntryMock.mockReturnValue(undefined);
   replaceSessionEntryMock.mockReset();
   replaceSessionEntryMock.mockResolvedValue(undefined);
+  patchSessionEntryMock.mockReset();
+  installPatchSessionEntryStore();
   resolveCronSessionMock.mockReset();
   resolveCronSessionMock.mockReturnValue(makeCronSession());
   callGatewayMock.mockReset();
   callGatewayMock.mockResolvedValue({ ok: true, deleted: true });
   retireSessionMcpRuntimeMock.mockReset();
   retireSessionMcpRuntimeMock.mockResolvedValue(true);
+}
+
+/**
+ * In-memory stand-in for the SQLite accessor `patchSessionEntry` used by the
+ * cron persist path. Prod flips real session storage to per-agent SQLite, but
+ * these orchestration tests must stay off disk. The store keys on
+ * storePath+sessionKey so successive persists in one run observe the row the
+ * previous persist committed, mirroring the accessor's read-modify-write and
+ * letting the lifecycle claim guard prove ownership without real SQLite.
+ */
+function installPatchSessionEntryStore(): void {
+  type PatchRow = Record<string, unknown>;
+  const rows = new Map<string, PatchRow>();
+  patchSessionEntryMock.mockImplementation(
+    async (
+      scope: { storePath?: string; sessionKey: string },
+      update: (
+        entry: PatchRow,
+        context: { existingEntry: PatchRow | undefined },
+      ) => PatchRow | null,
+      options: { fallbackEntry?: PatchRow } = {},
+    ) => {
+      const key = `${scope.storePath ?? ""} ${scope.sessionKey}`;
+      const existingEntry = rows.get(key);
+      const writeBase = existingEntry ?? options.fallbackEntry;
+      if (!writeBase) {
+        return null;
+      }
+      const next = update(structuredClone(writeBase), {
+        existingEntry: existingEntry ? structuredClone(existingEntry) : undefined,
+      });
+      if (!next) {
+        return structuredClone(writeBase);
+      }
+      const committed = structuredClone(next);
+      rows.set(key, committed);
+      return committed;
+    },
+  );
 }
 
 export function resetRunCronIsolatedAgentTurnHarness(): void {

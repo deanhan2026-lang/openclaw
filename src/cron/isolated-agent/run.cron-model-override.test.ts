@@ -13,7 +13,7 @@ import {
   resetRunCronIsolatedAgentTurnHarness,
   restoreFastTestEnv,
   runWithModelFallbackMock,
-  replaceSessionEntryMock,
+  patchSessionEntryMock,
 } from "./run.test-harness.js";
 
 const runCronIsolatedAgentTurn = await loadRunCronIsolatedAgentTurn();
@@ -100,7 +100,6 @@ describe("runCronIsolatedAgentTurn — cron model override (#21057)", () => {
     });
 
     resolveAgentConfigMock.mockReturnValue(undefined);
-    replaceSessionEntryMock.mockResolvedValue(undefined);
 
     cronSession = makeCronSession({
       sessionEntry: makeFreshSessionEntry(),
@@ -140,12 +139,29 @@ describe("runCronIsolatedAgentTurn — cron model override (#21057)", () => {
       modelProvider?: string;
       systemSent?: boolean;
     }> = [];
-    replaceSessionEntryMock.mockImplementation(
+    // The cron persist path calls patchSessionEntry(scope, updater, options);
+    // the committed row is the updater's return, so snapshot that. Thread the
+    // previously committed row forward as existingEntry so the lifecycle claim
+    // guard proves ownership across the run's successive persists.
+    let committedRow: { model?: string; modelProvider?: string; systemSent?: boolean } | undefined;
+    patchSessionEntryMock.mockImplementation(
       async (
         _scope: unknown,
-        entry: { model?: string; modelProvider?: string; systemSent?: boolean },
+        update: (
+          entry: unknown,
+          context: { existingEntry: unknown },
+        ) => { model?: string; modelProvider?: string; systemSent?: boolean } | null,
+        options: { fallbackEntry?: unknown } = {},
       ) => {
-        persistedSnapshots.push(structuredClone(entry));
+        const writeBase = committedRow ?? options.fallbackEntry;
+        const committed = update(structuredClone(writeBase), {
+          existingEntry: committedRow ? structuredClone(committedRow) : undefined,
+        });
+        if (committed) {
+          committedRow = structuredClone(committed);
+          persistedSnapshots.push(structuredClone(committed));
+        }
+        return committed;
       },
     );
 
@@ -225,11 +241,12 @@ describe("runCronIsolatedAgentTurn — cron model override (#21057)", () => {
     // Only the pre-run persist (call 2) should fail — the skills snapshot
     // persist is pre-existing code without a try-catch guard.
     let callCount = 0;
-    replaceSessionEntryMock.mockImplementation(async () => {
+    patchSessionEntryMock.mockImplementation(async () => {
       callCount++;
       if (callCount === 2) {
         throw new Error("ENOSPC: no space left on device");
       }
+      return null;
     });
 
     runWithModelFallbackMock.mockResolvedValueOnce(makeSuccessfulRunResult());
