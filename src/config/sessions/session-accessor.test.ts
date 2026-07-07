@@ -107,22 +107,12 @@ describe("session accessor seam", () => {
     });
   });
 
-  it("loads parsed transcript events from explicit and store-derived targets", async () => {
+  it("loads parsed transcript events from store-derived SQLite targets", async () => {
     const header = { type: "session", id: "session-events", timestamp: 1 };
     const message = { type: "message", id: "m1", message: { role: "assistant" } };
-    fs.writeFileSync(
-      transcriptPath,
-      `${JSON.stringify(header)}\n${JSON.stringify(message)}\nnot-json\n`,
-      "utf-8",
-    );
-    const explicit = await loadTranscriptEvents({
-      sessionFile: transcriptPath,
-      sessionId: "session-events",
-    });
-    expect(explicit).toEqual([header, message]);
 
-    // Store-derived reads resolve to the SQLite transcript rows, never a
-    // legacy custom sessionFile path.
+    // Transcript reads resolve to the SQLite transcript rows for the resolved
+    // agent-scoped session; there is no legacy custom sessionFile read path.
     await upsertSessionEntry(
       { sessionKey: "agent:main:main", storePath },
       { sessionId: "session-events", updatedAt: 10 },
@@ -139,25 +129,29 @@ describe("session accessor seam", () => {
     expect(derived).toEqual([header, message]);
 
     const missing = await loadTranscriptEvents({
-      sessionFile: path.join(tempDir, "missing.jsonl"),
-      sessionId: "session-events",
+      sessionId: "session-absent",
+      sessionKey: "agent:main:main",
+      storePath,
     });
     expect(missing).toEqual([]);
   });
 
-  it("finds the newest matching transcript event without loading the whole file", async () => {
+  it("finds the newest matching transcript event without loading the whole transcript", async () => {
     const header = { type: "session", id: "session-find", timestamp: 1 };
     const older = { type: "message", id: "m1", message: { role: "assistant", tag: "old" } };
     const newer = { type: "message", id: "m2", message: { role: "assistant", tag: "new" } };
-    fs.writeFileSync(
-      transcriptPath,
-      `${JSON.stringify(header)}\n${JSON.stringify(older)}\n${JSON.stringify(newer)}\n`,
-      "utf-8",
+    await upsertSessionEntry(
+      { sessionKey: "agent:main:main", storePath },
+      { sessionId: "session-find", updatedAt: 10 },
+    );
+    await replaceSqliteTranscriptEvents(
+      { agentId: "main", sessionId: "session-find", sessionKey: "agent:main:main", storePath },
+      [header, older, newer],
     );
 
     const seen: unknown[] = [];
     const found = await findTranscriptEvent(
-      { sessionFile: transcriptPath, sessionId: "session-find" },
+      { sessionId: "session-find", sessionKey: "agent:main:main", storePath },
       (event) => {
         seen.push(event);
         return (event as { type?: string }).type === "message";
@@ -168,7 +162,7 @@ describe("session accessor seam", () => {
     expect(seen).toEqual([newer]);
 
     const missing = await findTranscriptEvent(
-      { sessionFile: path.join(tempDir, "missing.jsonl"), sessionId: "session-find" },
+      { sessionId: "session-absent", sessionKey: "agent:main:main", storePath },
       () => true,
     );
     expect(missing).toBeUndefined();
