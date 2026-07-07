@@ -13,8 +13,7 @@ import {
   resolveSessionResetPolicy,
   type SessionFreshness,
 } from "../../config/sessions/reset-policy.js";
-import { loadSessionEntry } from "../../config/sessions/session-accessor.js";
-import { loadSessionStore } from "../../config/sessions/store-load.js";
+import { listSessionEntries, loadSessionEntry } from "../../config/sessions/session-accessor.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 
@@ -129,6 +128,7 @@ export function loadCronSessionEntryLatest(
 export function resolveCronSession(params: {
   cfg: OpenClawConfig;
   sessionKey: string;
+  sourceSessionKey?: string;
   nowMs: number;
   agentId: string;
   forceNew?: boolean;
@@ -138,9 +138,20 @@ export function resolveCronSession(params: {
   const storePath = resolveStorePath(sessionCfg?.store, {
     agentId: params.agentId,
   });
-  const store = params.store ?? loadSessionStore(storePath);
-  const entry = store[params.sessionKey];
-  const archivedSessionError = resolveSessionWorkStartError(params.sessionKey, entry);
+  const store =
+    params.store ??
+    Object.fromEntries(
+      listSessionEntries({ storePath }).map(({ sessionKey, entry }) => [sessionKey, entry]),
+    );
+  const sourceSessionKey = params.sourceSessionKey?.trim();
+  const sourceSessionDiffers = Boolean(sourceSessionKey && sourceSessionKey !== params.sessionKey);
+  const entry = store[sourceSessionKey || params.sessionKey];
+  // Guard the run's target row: archived sessions stay read-only even when a
+  // differing source session seeds the carried preferences.
+  const archivedSessionError = resolveSessionWorkStartError(
+    params.sessionKey,
+    store[params.sessionKey],
+  );
   if (archivedSessionError) {
     throw new Error(archivedSessionError);
   }
@@ -185,7 +196,7 @@ export function resolveCronSession(params: {
     systemSent = false;
   }
 
-  const previousSessionId = isNewSession ? entry?.sessionId : undefined;
+  const previousSessionId = isNewSession && !sourceSessionDiffers ? entry?.sessionId : undefined;
   clearBootstrapSnapshotOnSessionRollover({
     sessionKey: params.sessionKey,
     previousSessionId,

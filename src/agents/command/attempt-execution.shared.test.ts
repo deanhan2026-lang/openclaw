@@ -230,4 +230,98 @@ describe("persistSessionEntry", () => {
       clearSessionStoreCacheForTest();
     }
   });
+
+  it("does not recreate a deleted persisted entry from stale local memory", async () => {
+    const dir = tempDirs.make("openclaw-session-store-");
+    try {
+      const storePath = path.join(dir, "sessions.json");
+      const staleEntry: SessionEntry = {
+        sessionId: "deleted-session",
+        updatedAt: 1,
+      };
+      const sessionStore = { main: staleEntry };
+
+      const persisted = await persistSessionEntry({
+        sessionStore,
+        sessionKey: "main",
+        storePath,
+        initialEntry: staleEntry,
+        entry: {
+          sessionId: "deleted-session",
+          updatedAt: 2,
+        },
+      });
+
+      expect(persisted).toBeUndefined();
+      expect(sessionStore.main).toBeUndefined();
+      expect(loadSessionStore(storePath, { skipCache: true }).main).toBeUndefined();
+    } finally {
+      clearSessionStoreCacheForTest();
+    }
+  });
+
+  it("keeps rejecting repeated stale writes after clearing local memory", async () => {
+    const dir = tempDirs.make("openclaw-session-store-");
+    try {
+      const storePath = path.join(dir, "sessions.json");
+      const staleEntry: SessionEntry = {
+        sessionId: "deleted-session",
+        updatedAt: 1,
+      };
+      const sessionStore = {
+        main: staleEntry,
+      };
+
+      const first = await persistSessionEntry({
+        sessionStore,
+        sessionKey: "main",
+        storePath,
+        initialEntry: staleEntry,
+        entry: staleEntry,
+      });
+      const second = await persistSessionEntry({
+        sessionStore,
+        sessionKey: "main",
+        storePath,
+        initialEntry: staleEntry,
+        entry: {
+          ...staleEntry,
+          updatedAt: 2,
+        },
+      });
+
+      expect(first).toBeUndefined();
+      expect(second).toBeUndefined();
+      expect(sessionStore.main).toBeUndefined();
+      expect(loadSessionStore(storePath, { skipCache: true }).main).toBeUndefined();
+    } finally {
+      clearSessionStoreCacheForTest();
+    }
+  });
+
+  it("allows an explicit create-on-missing persistence predicate", async () => {
+    const dir = tempDirs.make("openclaw-session-store-");
+    try {
+      const storePath = path.join(dir, "sessions.json");
+      const sessionStore: Record<string, SessionEntry> = {};
+      const entry: SessionEntry = {
+        sessionId: "created-session",
+        updatedAt: 1,
+      };
+
+      const persisted = await persistSessionEntry({
+        sessionStore,
+        sessionKey: "main",
+        storePath,
+        initialEntry: entry,
+        entry,
+        shouldPersist: (existing) => existing === undefined,
+      });
+
+      expect(persisted?.sessionId).toBe("created-session");
+      expect(sessionStore.main?.sessionId).toBe("created-session");
+    } finally {
+      clearSessionStoreCacheForTest();
+    }
+  });
 });

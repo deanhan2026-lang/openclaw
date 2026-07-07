@@ -1,5 +1,4 @@
-import { rm, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { rm } from "node:fs/promises";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import {
   clearPluginInteractiveHandlers,
@@ -11,7 +10,8 @@ import {
   resetPluginStateStoreForTests,
 } from "openclaw/plugin-sdk/plugin-state-test-runtime";
 import type { MsgContext } from "openclaw/plugin-sdk/reply-runtime";
-import { loadSessionStore } from "openclaw/plugin-sdk/session-store-runtime";
+import { listSessionEntries, upsertSessionEntry } from "openclaw/plugin-sdk/session-store-runtime";
+import { appendSessionTranscriptMessageByIdentity } from "openclaw/plugin-sdk/session-transcript-runtime";
 import { mockPinnedHostnameResolution } from "openclaw/plugin-sdk/test-env";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -174,6 +174,10 @@ function mockMsgContextArg(
   return mockArg(source, callIndex, argIndex, label) as MsgContext;
 }
 
+function readOnlySessionEntry(storePath: string) {
+  return listSessionEntries({ storePath })[0]?.entry;
+}
+
 async function writeDirectTelegramTranscriptContext(params: {
   cfg: OpenClawConfig;
   storePath: string;
@@ -198,34 +202,27 @@ async function writeDirectTelegramTranscriptContext(params: {
     isGroup: false,
     senderId: params.senderId,
   });
-  await writeFile(
-    params.storePath,
-    JSON.stringify({
-      [sessionKey]: {
-        sessionId: params.sessionId,
-        chatType: "direct",
-        channel: "telegram",
-      },
-    }),
-    "utf-8",
-  );
-  await writeFile(
-    path.join(path.dirname(params.storePath), `${params.sessionId}.jsonl`),
-    [
-      JSON.stringify({ type: "session", id: params.sessionId }),
-      JSON.stringify({
-        id: params.role === "assistant" ? "transcript-assistant-1" : "transcript-user-1",
-        type: "message",
-        message: {
-          role: params.role ?? "user",
-          content: params.text,
-          timestamp: params.timestamp,
-        },
-      }),
-      "",
-    ].join("\n"),
-    "utf-8",
-  );
+  await upsertSessionEntry({
+    storePath: params.storePath,
+    sessionKey,
+    entry: {
+      sessionId: params.sessionId,
+      chatType: "direct",
+      channel: "telegram",
+      updatedAt: 1,
+    },
+  });
+  await appendSessionTranscriptMessageByIdentity({
+    agentId: "main",
+    storePath: params.storePath,
+    sessionId: params.sessionId,
+    sessionKey,
+    message: {
+      role: params.role ?? "user",
+      content: params.text,
+      timestamp: params.timestamp,
+    },
+  });
 }
 
 function execApprovalCall(index = 0) {
@@ -484,7 +481,7 @@ describe("createTelegramBot", () => {
 
       expect(replySpy).not.toHaveBeenCalled();
       expect(editMessageTextSpy).not.toHaveBeenCalled();
-      expect(loadSessionStore(storePath, { skipCache: true })).toStrictEqual({});
+      expect(listSessionEntries({ storePath })).toStrictEqual([]);
       expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-model-authz-bypass-1");
     } finally {
       await rm(storePath, { force: true });
@@ -557,7 +554,7 @@ describe("createTelegramBot", () => {
 
       expect(replySpy).not.toHaveBeenCalled();
       expect(editMessageTextSpy).not.toHaveBeenCalled();
-      expect(loadSessionStore(storePath, { skipCache: true })).toStrictEqual({});
+      expect(listSessionEntries({ storePath })).toStrictEqual([]);
       expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-group-model-authz-1");
     } finally {
       await rm(storePath, { force: true });
@@ -639,7 +636,7 @@ describe("createTelegramBot", () => {
 
       expect(replySpy).not.toHaveBeenCalled();
       expect(editMessageTextSpy).not.toHaveBeenCalled();
-      expect(loadSessionStore(storePath, { skipCache: true })).toStrictEqual({});
+      expect(listSessionEntries({ storePath })).toStrictEqual([]);
       expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-group-model-authz-runtime-1");
     } finally {
       loadConfig.mockReset();
@@ -1496,7 +1493,7 @@ describe("createTelegramBot", () => {
         "Session selection cleared. Runtime unchanged. New replies use the agent's configured default.",
       );
 
-      const entry = Object.values(loadSessionStore(storePath, { skipCache: true }))[0];
+      const entry = readOnlySessionEntry(storePath);
       expect(entry?.providerOverride).toBeUndefined();
       expect(entry?.modelOverride).toBeUndefined();
       expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-model-compact-1");
@@ -1655,7 +1652,7 @@ describe("createTelegramBot", () => {
         "Session selection cleared. Runtime unchanged. New replies use the agent's configured default.",
       );
 
-      const entry = Object.values(loadSessionStore(storePath, { skipCache: true }))[0];
+      const entry = readOnlySessionEntry(storePath);
       expect(entry?.providerOverride).toBeUndefined();
       expect(entry?.modelOverride).toBeUndefined();
       expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-model-default-1");
@@ -1735,7 +1732,7 @@ describe("createTelegramBot", () => {
       );
       expect(requireRecord(editCall[3], "edit params").parse_mode).toBe("HTML");
 
-      const entry = Object.values(loadSessionStore(storePath, { skipCache: true }))[0];
+      const entry = readOnlySessionEntry(storePath);
       expect(entry?.providerOverride).toBe("openai");
       expect(entry?.modelOverride).toBe("gpt-5.4");
       expect(answerCallbackQuerySpy).toHaveBeenCalledWith("cbq-model-html-1");
@@ -1825,7 +1822,7 @@ describe("createTelegramBot", () => {
 
       // Override must be persisted (not cleared) because openai/gpt-5.4 is
       // NOT the default in the fresh config.
-      const entry = Object.values(loadSessionStore(storePath, { skipCache: true }))[0];
+      const entry = readOnlySessionEntry(storePath);
       expect(entry?.providerOverride).toBe("openai");
       expect(entry?.modelOverride).toBe("gpt-5.4");
     } finally {

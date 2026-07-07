@@ -9,6 +9,7 @@ import type {
   SessionEntryPatchContext,
   SessionEntryPatchOptions,
 } from "../config/sessions/session-accessor.js";
+import { replaceSessionEntry } from "../config/sessions/session-accessor.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { CallGatewayOptions } from "../gateway/call.js";
@@ -1019,6 +1020,13 @@ describe("killSubagentRunAdmin", () => {
         updatedAt: Date.now(),
       },
     });
+    await replaceSessionEntry(
+      { sessionKey: childSessionKey, storePath },
+      {
+        sessionId: "sess-worker-finalizing",
+        updatedAt: Date.now(),
+      },
+    );
 
     addSubagentRunForTests({
       runId: "run-worker-finalizing",
@@ -1794,6 +1802,13 @@ describe("steerControlledSubagentRun", () => {
         updatedAt: Date.now(),
       },
     });
+    await replaceSessionEntry(
+      { sessionKey: childSessionKey, storePath },
+      {
+        sessionId: "sess-steer-finalizing",
+        updatedAt: Date.now(),
+      },
+    );
     addSubagentRunForTests({
       runId: "run-steer-finalizing",
       childSessionKey,
@@ -2043,6 +2058,13 @@ describe("steerControlledSubagentRun", () => {
         updatedAt: Date.now(),
       },
     });
+    await replaceSessionEntry(
+      { sessionKey: childSessionKey, storePath },
+      {
+        sessionId: "old-child-session",
+        updatedAt: Date.now(),
+      },
+    );
     const agentCalls: CallGatewayOptions[] = [];
     addSubagentRunForTests({
       runId: "run-active-steer",

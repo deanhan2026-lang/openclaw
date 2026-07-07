@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { LiveSessionModelSelection } from "../../agents/live-model-switch.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { mergeSessionSnapshotChanges } from "../../config/sessions/session-snapshot-merge.js";
+import { parseSqliteSessionFileMarker } from "../../config/sessions/sqlite-marker.js";
 import { isCronSessionKey } from "../../sessions/session-key-utils.js";
 import { isSessionWorkAdmissionActive } from "../../sessions/session-lifecycle-admission.js";
 import type { SkillSnapshot } from "../../skills/types.js";
@@ -21,10 +22,18 @@ export type MutableCronSession = ReturnType<typeof resolveCronSession> & {
 /** Live provider/model/auth-profile selection reported by the running session. */
 export type CronLiveSelection = LiveSessionModelSelection;
 
-type UpdateSessionStore = (
-  storePath: string,
-  update: (store: MutableSessionStore) => void,
-) => Promise<void>;
+/**
+ * Accessor-backed guarded write: `update` receives the freshest persisted row
+ * (undefined when absent), may throw to reject a stale lifecycle claim, and
+ * returns the full entry to commit. `fallbackEntry` seeds creation when the
+ * row does not exist yet.
+ */
+type PersistSessionEntry = (params: {
+  fallbackEntry: SessionEntry;
+  sessionKey: string;
+  storePath: string;
+  update: (currentEntry: SessionEntry | undefined) => SessionEntry;
+}) => Promise<void>;
 
 /** Persists the currently selected mutable cron session entry to the session store. */
 export type PersistCronSessionEntry = () => Promise<void>;
@@ -42,6 +51,9 @@ export function resolveCronLifecycleRevisionIdentity(lifecycleRevision: string):
 
 function cronTranscriptExists(entry: SessionEntry): boolean {
   const sessionFile = entry.sessionFile?.trim();
+  if (parseSqliteSessionFileMarker(sessionFile)) {
+    return true;
+  }
   return Boolean(sessionFile && fs.existsSync(sessionFile));
 }
 
@@ -62,7 +74,6 @@ function toNonResumableCronSessionEntry(entry: SessionEntry): SessionEntry {
   const next = { ...entry } as Partial<SessionEntry>;
   // If the transcript never materialized, do not persist stale resume handles
   // that would make the next cron run believe a resumable CLI session exists.
-  delete next.sessionId;
   delete next.sessionFile;
   delete next.sessionStartedAt;
   delete next.lastInteractionAt;
@@ -77,7 +88,7 @@ export function createPersistCronSessionEntry(params: {
   isFastTestEnv: boolean;
   cronSession: MutableCronSession;
   agentSessionKey: string;
-  updateSessionStore: UpdateSessionStore;
+  persistSessionEntry: PersistSessionEntry;
 }): PersistCronSessionEntry {
   return async () => {
     if (params.isFastTestEnv) {
@@ -92,48 +103,52 @@ export function createPersistCronSessionEntry(params: {
         : liveEntry;
     let committedEntry = persistedEntry;
     let mergedLiveEntry = liveEntry;
-    await params.updateSessionStore(params.cronSession.storePath, (store) => {
-      const currentEntry = store[params.agentSessionKey];
-      const ownsCurrentRevision =
-        currentEntry?.lifecycleRevision === params.cronSession.lifecycleRevision;
-      const currentRevisionActive = Boolean(
-        currentEntry?.lifecycleRevision &&
-        isSessionWorkAdmissionActive(params.cronSession.storePath, [
-          resolveCronLifecycleRevisionIdentity(currentEntry.lifecycleRevision),
-        ]),
-      );
-      const initialEntryMatchesOwnershipFields =
-        currentEntry !== undefined &&
-        params.cronSession.initialSessionEntry !== undefined &&
-        isDeepStrictEqual(
-          projectCronOwnershipFields(currentEntry),
-          projectCronOwnershipFields(params.cronSession.initialSessionEntry),
+    await params.persistSessionEntry({
+      storePath: params.cronSession.storePath,
+      sessionKey: params.agentSessionKey,
+      fallbackEntry: persistedEntry,
+      update: (currentEntry) => {
+        const ownsCurrentRevision =
+          currentEntry?.lifecycleRevision === params.cronSession.lifecycleRevision;
+        const currentRevisionActive = Boolean(
+          currentEntry?.lifecycleRevision &&
+          isSessionWorkAdmissionActive(params.cronSession.storePath, [
+            resolveCronLifecycleRevisionIdentity(currentEntry.lifecycleRevision),
+          ]),
         );
-      const canClaimInitialRevision = params.cronSession.initialSessionEntry
-        ? !currentRevisionActive && initialEntryMatchesOwnershipFields
-        : currentEntry === undefined;
-      // Concurrent persistent runs can resolve the same initial row. Once one
-      // revision claims it, older owners must not reclaim it and delete newer state.
-      if (!ownsCurrentRevision && !canClaimInitialRevision) {
-        throw new CronSessionLifecycleClaimError(params.agentSessionKey);
-      }
-      if (
-        (ownsCurrentRevision || canClaimInitialRevision) &&
-        currentEntry &&
-        params.cronSession.initialSessionEntry
-      ) {
-        committedEntry = mergeSessionSnapshotChanges({
-          initial: params.cronSession.initialSessionEntry,
-          next: persistedEntry,
-          current: currentEntry,
-        });
-        mergedLiveEntry = mergeSessionSnapshotChanges({
-          initial: params.cronSession.initialSessionEntry,
-          next: liveEntry,
-          current: currentEntry,
-        });
-      }
-      store[params.agentSessionKey] = committedEntry;
+        const initialEntryMatchesOwnershipFields =
+          currentEntry !== undefined &&
+          params.cronSession.initialSessionEntry !== undefined &&
+          isDeepStrictEqual(
+            projectCronOwnershipFields(currentEntry),
+            projectCronOwnershipFields(params.cronSession.initialSessionEntry),
+          );
+        const canClaimInitialRevision = params.cronSession.initialSessionEntry
+          ? !currentRevisionActive && initialEntryMatchesOwnershipFields
+          : currentEntry === undefined;
+        // Concurrent persistent runs can resolve the same initial row. Once one
+        // revision claims it, older owners must not reclaim it and delete newer state.
+        if (!ownsCurrentRevision && !canClaimInitialRevision) {
+          throw new CronSessionLifecycleClaimError(params.agentSessionKey);
+        }
+        if (
+          (ownsCurrentRevision || canClaimInitialRevision) &&
+          currentEntry &&
+          params.cronSession.initialSessionEntry
+        ) {
+          committedEntry = mergeSessionSnapshotChanges({
+            initial: params.cronSession.initialSessionEntry,
+            next: persistedEntry,
+            current: currentEntry,
+          });
+          mergedLiveEntry = mergeSessionSnapshotChanges({
+            initial: params.cronSession.initialSessionEntry,
+            next: liveEntry,
+            current: currentEntry,
+          });
+        }
+        return committedEntry;
+      },
     });
     // The storage projection may intentionally omit resume identity until its
     // transcript exists. Keep that projection out of the active run object.

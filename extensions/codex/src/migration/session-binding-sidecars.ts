@@ -11,7 +11,6 @@ import type { PluginStateKeyedStore } from "openclaw/plugin-sdk/plugin-state-run
 import type { PluginDoctorStateMigration } from "openclaw/plugin-sdk/runtime-doctor";
 import {
   listSessionEntries,
-  resolveSessionFilePath,
   resolveStorePath,
   updateSessionStoreEntry,
 } from "openclaw/plugin-sdk/session-store-runtime";
@@ -175,20 +174,17 @@ async function* iterateIndexedSidecars(
       if (!sessionId) {
         continue;
       }
-      const agentId = resolveLegacyBindingOwnerAgentId({
-        sessionKey,
-        config: params.config,
-        storeAgentIds: surface.agentIds,
-      });
-      let transcriptPath: string;
-      try {
-        transcriptPath = resolveSessionFilePath(sessionId, entry, {
-          sessionsDir: path.dirname(storePath),
-          agentId,
-        });
-      } catch {
+      // Legacy sidecars sit beside file-era transcripts; sqlite-marker entries
+      // never had sidecars, so the raw locator is skipped for them.
+      const sessionFile = entry.sessionFile?.trim() ?? "";
+      if (sessionFile.startsWith("sqlite:")) {
         continue;
       }
+      const transcriptPath = resolveLegacySessionFileLocator(
+        path.dirname(storePath),
+        entry,
+        sessionId,
+      );
       const sidecarPath = `${transcriptPath}${LEGACY_BINDING_SUFFIX}`;
       if (await isRegularFile(sidecarPath)) {
         yield sidecarPath;

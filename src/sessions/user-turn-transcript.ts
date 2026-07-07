@@ -11,7 +11,6 @@ import type {
   UserTurnBeforeMessageWrite,
   UserTurnInput,
   UserTurnSessionEntry,
-  UserTurnTranscriptFileTarget,
   UserTurnTranscriptPersistResult,
   UserTurnTranscriptRecorder,
   UserTurnTranscriptTarget,
@@ -56,6 +55,7 @@ type PersistUserTurnTranscriptParams = {
   input?: UserTurnInput;
   message?: PersistedUserTurnMessage;
   sessionId: string;
+  expectedSessionId?: string;
   sessionKey: string;
   sessionEntry: UserTurnSessionEntry | undefined;
   sessionStore?: Record<string, UserTurnSessionEntry>;
@@ -539,6 +539,7 @@ export async function persistUserTurnTranscript(
     {
       ...(params.cwd ? { cwd: params.cwd } : {}),
       ...(params.config ? { config: params.config as OpenClawConfig } : {}),
+      ...(params.expectedSessionId ? { expectedSessionId: params.expectedSessionId } : {}),
       updateMode: params.updateMode ?? "inline",
       messages: [
         {
@@ -570,38 +571,10 @@ export async function persistUserTurnTranscript(
   };
 }
 
-async function appendFileTargetUserTurnTranscript(params: {
-  target: UserTurnTranscriptFileTarget;
-  message: PersistedUserTurnMessage;
-  updateMode: UserTurnTranscriptUpdateMode;
-  beforeMessageWrite?: UserTurnBeforeMessageWrite;
-}): Promise<UserTurnTranscriptPersistResult | undefined> {
-  const { config, ...target } = params.target;
-  const appended = await appendUserTurnTranscriptMessage({
-    ...target,
-    message: params.message,
-    updateMode: params.updateMode,
-    ...(config ? { config: config as OpenClawConfig } : {}),
-    ...(params.beforeMessageWrite ? { beforeMessageWrite: params.beforeMessageWrite } : {}),
-  });
-  return appended
-    ? {
-        ...appended,
-        sessionEntry: undefined,
-      }
-    : undefined;
-}
-
 async function resolveUserTurnTranscriptTarget(
   target: UserTurnTranscriptTargetResolver,
 ): Promise<UserTurnTranscriptTarget | undefined> {
   return typeof target === "function" ? await target() : target;
-}
-
-function isUserTurnTranscriptFileTarget(
-  target: UserTurnTranscriptTarget,
-): target is UserTurnTranscriptFileTarget {
-  return "transcriptPath" in target;
 }
 
 export function createUserTurnTranscriptRecorder(
@@ -610,6 +583,7 @@ export function createUserTurnTranscriptRecorder(
   const message = resolvePersistedUserTurnMessage(params);
   let blocked = false;
   let persisted = false;
+  let runtimePersisted = false;
   let persistedResult: UserTurnTranscriptPersistResult | undefined;
   let runtimePersistencePromise: Promise<void> | undefined;
   let selfPersistencePromise: Promise<UserTurnTranscriptPersistResult | undefined> | undefined;
@@ -689,25 +663,27 @@ export function createUserTurnTranscriptRecorder(
   const persistPrepared = async (options: {
     waitForRuntime: boolean;
     skipWhenBlocked: boolean;
+    message?: PersistedUserTurnMessage;
     target?: UserTurnTranscriptTargetResolver;
     updateMode?: UserTurnTranscriptUpdateMode;
+    cwd?: string;
   }): Promise<UserTurnTranscriptPersistResult | undefined> => {
     if (options.skipWhenBlocked && blocked) {
       return undefined;
     }
-    if (!message && !params.resolveInput) {
+    if (!options.message && !message && !params.resolveInput) {
       return undefined;
     }
     if (options.waitForRuntime) {
-      // Approved persistence waits for runtime-owned writes first to avoid
-      // duplicate user turns when the harness already persisted the message.
+      // Runtime writers may finish first, but active transcript durability is
+      // still owned by the canonical SQLite target below.
       await waitForRuntimePersistence();
     }
     if (selfPersistencePromise) {
       return await selfPersistencePromise;
     }
     selfPersistencePromise = (async () => {
-      const resolvedMessage = await resolveMessageForPersistence();
+      const resolvedMessage = options.message ?? (await resolveMessageForPersistence());
       if (!resolvedMessage) {
         return undefined;
       }
@@ -715,26 +691,18 @@ export function createUserTurnTranscriptRecorder(
       if (!target) {
         return undefined;
       }
+      const resolvedTarget = options.cwd ? { ...target, cwd: options.cwd } : target;
       const updateMode = options.updateMode ?? params.updateMode ?? "inline";
       const persistMessage = async (
         candidate: PersistedUserTurnMessage,
         candidateUpdateMode: UserTurnTranscriptUpdateMode,
       ) =>
-        isUserTurnTranscriptFileTarget(target)
-          ? await appendFileTargetUserTurnTranscript({
-              target,
-              message: candidate,
-              updateMode: candidateUpdateMode,
-              beforeMessageWrite: params.beforeMessageWrite,
-            })
-          : await persistUserTurnTranscript({
-              ...target,
-              message: candidate,
-              updateMode: candidateUpdateMode,
-              ...(params.beforeMessageWrite
-                ? { beforeMessageWrite: params.beforeMessageWrite }
-                : {}),
-            });
+        await persistUserTurnTranscript({
+          ...resolvedTarget,
+          message: candidate,
+          updateMode: candidateUpdateMode,
+          ...(params.beforeMessageWrite ? { beforeMessageWrite: params.beforeMessageWrite } : {}),
+        });
       const lateMediaMessage =
         sentToProvider && !resolvedBeforeProvider
           ? buildLateResolvedMediaMessage({
@@ -789,8 +757,8 @@ export function createUserTurnTranscriptRecorder(
       runtimePersistencePromise = pending;
     },
     markRuntimePersisted: (persistedMessage) => {
-      persisted = true;
       runtimePersistedMessage = persistedMessage;
+      runtimePersisted = true;
       if (persistedMessage && persistedResult) {
         persistedResult = {
           ...persistedResult,
@@ -802,7 +770,7 @@ export function createUserTurnTranscriptRecorder(
     markBlocked: () => {
       blocked = true;
     },
-    hasPersisted: () => persisted,
+    hasPersisted: () => persisted || runtimePersisted,
     isBlocked: () => blocked,
     hasRuntimePersistencePending: () => runtimePersistencePromise !== undefined,
     waitForRuntimePersistence,
@@ -812,13 +780,26 @@ export function createUserTurnTranscriptRecorder(
         skipWhenBlocked: true,
         target: options?.target,
         updateMode: options?.updateMode,
+        cwd: options?.cwd,
       }),
+    persistBlocked: async (blockedMessage, options) => {
+      blocked = true;
+      return await persistPrepared({
+        waitForRuntime: false,
+        skipWhenBlocked: false,
+        message: blockedMessage,
+        target: options?.target,
+        updateMode: options?.updateMode,
+        cwd: options?.cwd,
+      });
+    },
     persistFallback: async (options) =>
       await persistPrepared({
         waitForRuntime: true,
         skipWhenBlocked: true,
         target: options?.target,
         updateMode: options?.updateMode,
+        cwd: options?.cwd,
       }),
   };
 }

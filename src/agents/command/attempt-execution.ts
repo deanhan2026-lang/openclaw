@@ -354,7 +354,9 @@ async function persistTextTurnTranscript(
         if (!params.embeddedAssistantGapFill) {
           return true;
         }
-        const latest = await readTailAssistantTextFromSessionTranscript(sessionFile);
+        const latest = await readTailAssistantTextFromSessionTranscript(sessionFile, {
+          excludeTranscriptOnlyOpenClawAssistant: true,
+        });
         const normalizedReply = normalizeTranscriptMirrorText(replyText);
         const normalizedLatest = latest?.text ? normalizeTranscriptMirrorText(latest.text) : "";
         return !normalizedLatest || normalizedLatest !== normalizedReply;
@@ -691,6 +693,7 @@ export function runAgentAttempt(params: {
         agentId: params.sessionAgentId,
         trigger: "user",
         sessionFile: params.sessionFile,
+        storePath: params.storePath,
         workspaceDir: params.workspaceDir,
         cwd: params.cwd,
         config: params.cfg,

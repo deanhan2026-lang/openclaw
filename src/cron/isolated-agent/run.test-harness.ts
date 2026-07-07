@@ -62,8 +62,8 @@ export const getCliSessionBindingMock = createMock();
 export const getCliSessionIdMock = createMock();
 export const clearCliSessionMock = createMock();
 export const setCliSessionBindingMock = createMock();
-export const updateSessionStoreMock = createMock();
 export const loadSessionEntryMock = createMock();
+export const replaceSessionEntryMock = createMock();
 export const resolveCronSessionMock = createMock();
 export const logWarnMock = createMock();
 export const countActiveDescendantRunsMock = createMock();
@@ -319,8 +319,11 @@ vi.mock("../../gateway/call.runtime.js", () => ({
   callGateway: callGatewayMock,
 }));
 
-vi.mock("../../config/sessions/store.runtime.js", () => ({
-  updateSessionStore: updateSessionStoreMock,
+vi.mock("../../config/sessions/session-accessor.js", async () => ({
+  ...(await vi.importActual<typeof import("../../config/sessions/session-accessor.js")>(
+    "../../config/sessions/session-accessor.js",
+  )),
+  replaceSessionEntry: replaceSessionEntryMock,
 }));
 
 vi.mock("../delivery-plan.js", async () => ({
@@ -686,8 +689,8 @@ function resetRunOutcomeMocks(): void {
 function resetRunSessionMocks(): void {
   loadSessionEntryMock.mockReset();
   loadSessionEntryMock.mockReturnValue(undefined);
-  updateSessionStoreMock.mockReset();
-  updateSessionStoreMock.mockResolvedValue(undefined);
+  replaceSessionEntryMock.mockReset();
+  replaceSessionEntryMock.mockResolvedValue(undefined);
   resolveCronSessionMock.mockReset();
   resolveCronSessionMock.mockReturnValue(makeCronSession());
   callGatewayMock.mockReset();

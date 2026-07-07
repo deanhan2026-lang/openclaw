@@ -9,6 +9,7 @@ import { wrapUntrustedPromptDataBlock } from "../../agents/sanitize-for-prompt.j
 import { normalizeToolName } from "../../agents/tool-policy.js";
 import type { ThinkLevel, VerboseLevel } from "../../auto-reply/thinking.js";
 import type { CliSessionBinding } from "../../config/sessions.js";
+import { formatSqliteSessionFileMarker } from "../../config/sessions/sqlite-marker.js";
 import type { AgentDefaultsConfig } from "../../config/types.agent-defaults.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import type { SourceDeliveryPlan } from "../../infra/outbound/source-delivery-plan.js";
@@ -36,7 +37,6 @@ import {
   registerAgentRunContext,
   resolveBootstrapWarningSignaturesSeen,
   resolveCronAgentLane,
-  resolveSessionTranscriptPath,
   runCliAgent,
   runWithModelFallback,
 } from "./run-execution.runtime.js";
@@ -210,6 +210,7 @@ export function createCronPromptExecutor(params: {
   agentDir: string;
   agentSessionKey: string;
   runSessionKey: string;
+  usesDetachedRunSession?: boolean;
   workspaceDir: string;
   lane?: string;
   resolvedVerboseLevel: VerboseLevel;
@@ -247,7 +248,11 @@ export function createCronPromptExecutor(params: {
 }) {
   const sessionFile =
     params.cronSession.sessionEntry.sessionFile?.trim() ||
-    resolveSessionTranscriptPath(params.cronSession.sessionEntry.sessionId, params.agentId);
+    formatSqliteSessionFileMarker({
+      agentId: params.agentId,
+      sessionId: params.cronSession.sessionEntry.sessionId,
+      storePath: params.cronSession.storePath,
+    });
   // Fallback for callers that bypass prepareCronRunContext before persisting retries.
   if (!params.cronSession.sessionEntry.sessionFile?.trim()) {
     params.cronSession.sessionEntry.sessionFile = sessionFile;
@@ -374,7 +379,7 @@ export function createCronPromptExecutor(params: {
             agentId: params.agentId,
             trigger: "cron",
             jobId: params.job.id,
-            cleanupCliLiveSessionOnRunEnd: params.job.sessionTarget === "isolated",
+            cleanupCliLiveSessionOnRunEnd: params.usesDetachedRunSession === true,
             sessionFile,
             workspaceDir: params.workspaceDir,
             config: params.cfgWithAgentDefaults,
@@ -437,7 +442,7 @@ export function createCronPromptExecutor(params: {
           agentId: params.agentId,
           trigger: "cron",
           jobId: params.job.id,
-          cleanupBundleMcpOnRunEnd: params.job.sessionTarget === "isolated",
+          cleanupBundleMcpOnRunEnd: params.usesDetachedRunSession === true,
           allowGatewaySubagentBinding: true,
           messageChannel,
           agentAccountId: params.resolvedDelivery.accountId,
@@ -543,6 +548,7 @@ export async function executeCronRun(params: {
   agentDir: string;
   agentSessionKey: string;
   runSessionKey: string;
+  usesDetachedRunSession?: boolean;
   workspaceDir: string;
   lane?: string;
   resolvedDelivery: {
@@ -607,6 +613,7 @@ export async function executeCronRun(params: {
     agentDir: params.agentDir,
     agentSessionKey: params.agentSessionKey,
     runSessionKey: params.runSessionKey,
+    usesDetachedRunSession: params.usesDetachedRunSession,
     workspaceDir: params.workspaceDir,
     lane: params.lane,
     resolvedVerboseLevel,

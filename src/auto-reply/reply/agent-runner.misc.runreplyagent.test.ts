@@ -13,7 +13,7 @@ import { clearRuntimeConfigSnapshot } from "../../config/config.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import * as sessionTypesModule from "../../config/sessions.js";
 import type { SessionEntry } from "../../config/sessions.js";
-import { loadSessionStore, saveSessionStore } from "../../config/sessions.js";
+import { loadSessionEntry, replaceSessionEntry } from "../../config/sessions/session-accessor.js";
 import {
   onInternalDiagnosticEvent,
   resetDiagnosticEventsForTest,
@@ -206,7 +206,16 @@ vi.mock("../../agents/subagent-registry.js", () => ({
 const warnPrivateFinalSpy = vi.hoisted(() => vi.fn());
 vi.mock("./private-message-tool-final.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./private-message-tool-final.js")>();
-  return { ...actual, warnPrivateMessageToolFinal: warnPrivateFinalSpy };
+  return {
+    ...actual,
+    shouldWarnAboutPrivateMessageToolFinal: (params: never) => {
+      console.error("DBG shouldWarn params", JSON.stringify(params));
+      const r = actual.shouldWarnAboutPrivateMessageToolFinal(params);
+      console.error("DBG shouldWarn result", r);
+      return r;
+    },
+    warnPrivateMessageToolFinal: warnPrivateFinalSpy,
+  };
 });
 
 import { runReplyAgent } from "./agent-runner.js";
@@ -312,10 +321,9 @@ describe("runReplyAgent auto-compaction token update", () => {
     entry: Record<string, unknown>;
   }) {
     await fs.mkdir(path.dirname(params.storePath), { recursive: true });
-    await fs.writeFile(
-      params.storePath,
-      JSON.stringify({ [params.sessionKey]: params.entry }, null, 2),
-      "utf-8",
+    await replaceSessionEntry(
+      { storePath: params.storePath, sessionKey: params.sessionKey },
+      params.entry as SessionEntry,
     );
   }
 
@@ -498,7 +506,8 @@ describe("runReplyAgent auto-compaction token update", () => {
       unsubscribe?.();
     }
 
-    const stored = JSON.parse(await fs.readFile(storePath, "utf-8"));
+    const persisted = loadSessionEntry({ storePath, sessionKey });
+    const stored = persisted ? { [sessionKey]: persisted } : {};
     const usageEvent = diagnostics.find((event) => event.type === "model.usage");
     return { sessionKey, stored, usageEvent };
   }
@@ -525,7 +534,7 @@ describe("runReplyAgent auto-compaction token update", () => {
     });
 
     // totalTokens should use lastCallUsage (55k), not accumulated (75k)
-    expect(stored[sessionKey].totalTokens).toBe(55_000);
+    expect(stored[sessionKey as keyof typeof stored]?.totalTokens).toBe(55_000);
   }, 180_000);
 
   it("keeps an unarmed preflight drain visible instead of dropping the reply", async () => {
@@ -938,11 +947,10 @@ describe("runReplyAgent auto-compaction token update", () => {
     );
   });
 
-  it("reads opted-in post-compaction context from the queued workspace instead of process cwd", async () => {
+  it("does not treat diagnostic compaction metadata as a context-refresh trigger", async () => {
     const workspaceDir = await fs.mkdtemp(
       path.join(os.tmpdir(), "openclaw-post-compaction-workspace-"),
     );
-    const cwdDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-post-compaction-cwd-"));
     await fs.writeFile(
       path.join(workspaceDir, "AGENTS.md"),
       [
@@ -955,32 +963,25 @@ describe("runReplyAgent auto-compaction token update", () => {
       "utf-8",
     );
 
-    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(cwdDir);
-    try {
-      const { sessionKey } = await runBaseReplyWithAgentMeta({
-        tmpPrefix: "openclaw-post-compaction-workspace-root-",
-        workspaceDir,
-        config: {
-          agents: {
-            defaults: {
-              compaction: { postCompactionSections: ["Session Startup", "Red Lines"] },
-            },
+    const { sessionKey } = await runBaseReplyWithAgentMeta({
+      tmpPrefix: "openclaw-post-compaction-workspace-root-",
+      workspaceDir,
+      config: {
+        agents: {
+          defaults: {
+            compaction: { postCompactionSections: ["Session Startup", "Red Lines"] },
           },
         },
-        agentMeta: {
-          compactionCount: 1,
-          lastCallUsage: { input: 10_000, output: 500, total: 10_500 },
-        },
-      });
+      },
+      agentMeta: {
+        compactionCount: 1,
+        lastCallUsage: { input: 10_000, output: 500, total: 10_500 },
+      },
+    });
 
-      await vi.waitFor(() => {
-        const events = peekSystemEvents(sessionKey);
-        expect(events[0]).toContain("Post-compaction context refresh");
-        expect(events[0]).toContain("Read the queued workspace startup file.");
-      });
-    } finally {
-      cwdSpy.mockRestore();
-    }
+    // agentMeta.compactionCount is diagnostic metadata from the harness result;
+    // post-compaction context refresh belongs to runner-owned compaction paths.
+    expect(peekSystemEvents(sessionKey)).toEqual([]);
   });
 });
 
@@ -1184,6 +1185,29 @@ describe("runReplyAgent block streaming", () => {
 });
 
 describe("runReplyAgent Active Memory inline debug", () => {
+  // Seeds the plugin-owned debug rows through the canonical session accessor.
+  async function writeActiveMemoryDebugEntry(params: {
+    sessionEntry: SessionEntry;
+    sessionKey: string;
+    storePath: string;
+  }): Promise<void> {
+    await replaceSessionEntry(
+      { storePath: params.storePath, sessionKey: params.sessionKey },
+      {
+        ...params.sessionEntry,
+        pluginDebugEntries: [
+          {
+            pluginId: "active-memory",
+            lines: [
+              "🧩 Active Memory: status=ok elapsed=842ms query=recent summary=34 chars",
+              "🔎 Active Memory Debug: Lemon pepper wings with blue cheese.",
+            ],
+          },
+        ],
+      },
+    );
+  }
+
   it("appends inline Active Memory status payload when verbose is enabled", async () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-active-memory-inline-"));
     const storePath = path.join(tmp, "sessions.json");
@@ -1194,33 +1218,10 @@ describe("runReplyAgent Active Memory inline debug", () => {
       verboseLevel: "on",
     };
 
-    await fs.writeFile(
-      storePath,
-      JSON.stringify(
-        {
-          [sessionKey]: sessionEntry,
-        },
-        null,
-        2,
-      ),
-      "utf-8",
-    );
+    await replaceSessionEntry({ storePath, sessionKey }, sessionEntry);
 
     runEmbeddedAgentMock.mockImplementationOnce(async () => {
-      const latest = loadSessionStore(storePath, { skipCache: true });
-      latest[sessionKey] = {
-        ...latest[sessionKey],
-        pluginDebugEntries: [
-          {
-            pluginId: "active-memory",
-            lines: [
-              "🧩 Active Memory: status=ok elapsed=842ms query=recent summary=34 chars",
-              "🔎 Active Memory Debug: Lemon pepper wings with blue cheese.",
-            ],
-          },
-        ],
-      };
-      await saveSessionStore(storePath, latest);
+      await writeActiveMemoryDebugEntry({ sessionEntry, sessionKey, storePath });
       return {
         payloads: [{ text: "Normal reply" }],
         meta: {},
@@ -1306,33 +1307,10 @@ describe("runReplyAgent Active Memory inline debug", () => {
       traceLevel: "on",
     };
 
-    await fs.writeFile(
-      storePath,
-      JSON.stringify(
-        {
-          [sessionKey]: sessionEntry,
-        },
-        null,
-        2,
-      ),
-      "utf-8",
-    );
+    await replaceSessionEntry({ storePath, sessionKey }, sessionEntry);
 
     runEmbeddedAgentMock.mockImplementationOnce(async () => {
-      const latest = loadSessionStore(storePath, { skipCache: true });
-      latest[sessionKey] = {
-        ...latest[sessionKey],
-        pluginDebugEntries: [
-          {
-            pluginId: "active-memory",
-            lines: [
-              "🧩 Active Memory: status=ok elapsed=842ms query=recent summary=34 chars",
-              "🔎 Active Memory Debug: Lemon pepper wings with blue cheese.",
-            ],
-          },
-        ],
-      };
-      await saveSessionStore(storePath, latest);
+      await writeActiveMemoryDebugEntry({ sessionEntry, sessionKey, storePath });
       return {
         payloads: [{ text: "Normal reply" }],
         meta: {},
@@ -1417,33 +1395,10 @@ describe("runReplyAgent Active Memory inline debug", () => {
       traceLevel: "on",
     };
 
-    await fs.writeFile(
-      storePath,
-      JSON.stringify(
-        {
-          [sessionKey]: sessionEntry,
-        },
-        null,
-        2,
-      ),
-      "utf-8",
-    );
+    await replaceSessionEntry({ storePath, sessionKey }, sessionEntry);
 
     runEmbeddedAgentMock.mockImplementationOnce(async () => {
-      const latest = loadSessionStore(storePath, { skipCache: true });
-      latest[sessionKey] = {
-        ...latest[sessionKey],
-        pluginDebugEntries: [
-          {
-            pluginId: "active-memory",
-            lines: [
-              "🧩 Active Memory: status=ok elapsed=842ms query=recent summary=34 chars",
-              "🔎 Active Memory Debug: Lemon pepper wings with blue cheese.",
-            ],
-          },
-        ],
-      };
-      await saveSessionStore(storePath, latest);
+      await writeActiveMemoryDebugEntry({ sessionEntry, sessionKey, storePath });
       return {
         payloads: [{ text: "Normal reply" }],
         meta: {},
@@ -1530,17 +1485,7 @@ describe("runReplyAgent Active Memory inline debug", () => {
       compactionCount: 3,
     };
 
-    await fs.writeFile(
-      storePath,
-      JSON.stringify(
-        {
-          [sessionKey]: sessionEntry,
-        },
-        null,
-        2,
-      ),
-      "utf-8",
-    );
+    await replaceSessionEntry({ storePath, sessionKey }, sessionEntry);
     await fs.writeFile(
       sessionFile,
       [
@@ -1776,7 +1721,7 @@ describe("runReplyAgent Active Memory inline debug", () => {
       traceLevel: "raw",
     };
 
-    await fs.writeFile(storePath, JSON.stringify({ [sessionKey]: sessionEntry }, null, 2), "utf-8");
+    await replaceSessionEntry({ storePath, sessionKey }, sessionEntry);
     await fs.writeFile(sessionFile, "", "utf-8");
 
     runEmbeddedAgentMock.mockResolvedValueOnce({
@@ -1872,17 +1817,7 @@ describe("runReplyAgent Active Memory inline debug", () => {
       traceLevel: "raw",
     };
 
-    await fs.writeFile(
-      storePath,
-      JSON.stringify(
-        {
-          [sessionKey]: sessionEntry,
-        },
-        null,
-        2,
-      ),
-      "utf-8",
-    );
+    await replaceSessionEntry({ storePath, sessionKey }, sessionEntry);
     await fs.writeFile(
       sessionFile,
       `${JSON.stringify({
@@ -1992,7 +1927,7 @@ describe("runReplyAgent Active Memory inline debug", () => {
       traceLevel: "raw",
     };
 
-    await fs.writeFile(storePath, JSON.stringify({ [sessionKey]: sessionEntry }, null, 2), "utf-8");
+    await replaceSessionEntry({ storePath, sessionKey }, sessionEntry);
     await fs.writeFile(sessionFile, "", "utf-8");
 
     runEmbeddedAgentMock.mockResolvedValueOnce({
@@ -2087,17 +2022,7 @@ describe("runReplyAgent Active Memory inline debug", () => {
       updatedAt: Date.now(),
     };
 
-    await fs.writeFile(
-      storePath,
-      JSON.stringify(
-        {
-          [sessionKey]: sessionEntry,
-        },
-        null,
-        2,
-      ),
-      "utf-8",
-    );
+    await replaceSessionEntry({ storePath, sessionKey }, sessionEntry);
 
     const loadSessionStoreSpy = vi.spyOn(sessionTypesModule, "loadSessionStore");
     runEmbeddedAgentMock.mockResolvedValueOnce({
@@ -3450,7 +3375,7 @@ describe("runReplyAgent private message_tool_only final warning (#85714)", () =>
     const storePath = path.join(tmp, "sessions.json");
     const sessionKey = "stranded";
     const sessionEntry = { sessionId: "session", updatedAt: Date.now(), totalTokens: 1_000 };
-    await fs.writeFile(storePath, JSON.stringify({ [sessionKey]: sessionEntry }, null, 2), "utf-8");
+    await replaceSessionEntry({ storePath, sessionKey }, sessionEntry);
 
     const finalAssistantText =
       params.finalAssistantText ??

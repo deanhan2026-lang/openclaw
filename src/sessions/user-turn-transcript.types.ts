@@ -40,6 +40,7 @@ export type UserTurnBeforeMessageWrite = (params: {
 
 type UserTurnTranscriptPersistenceTarget = {
   sessionId: string;
+  expectedSessionId?: string;
   sessionKey: string;
   sessionEntry: UserTurnSessionEntry | undefined;
   sessionStore?: Record<string, UserTurnSessionEntry>;
@@ -89,9 +90,19 @@ export type UserTurnTranscriptRecorder = {
   persistApproved: (params?: {
     target?: UserTurnTranscriptTargetResolver;
     updateMode?: UserTurnTranscriptUpdateMode;
+    cwd?: string;
   }) => Promise<UserTurnTranscriptPersistResult | undefined>;
+  persistBlocked: (
+    message: PersistedUserTurnMessage,
+    params?: {
+      target?: UserTurnTranscriptTargetResolver;
+      updateMode?: UserTurnTranscriptUpdateMode;
+      cwd?: string;
+    },
+  ) => Promise<UserTurnTranscriptPersistResult | undefined>;
   persistFallback: (params?: {
     target?: UserTurnTranscriptTargetResolver;
     updateMode?: UserTurnTranscriptUpdateMode;
+    cwd?: string;
   }) => Promise<UserTurnTranscriptPersistResult | undefined>;
 };
