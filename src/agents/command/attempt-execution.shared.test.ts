@@ -3,11 +3,8 @@
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
-import {
-  clearSessionStoreCacheForTest,
-  loadSessionStore,
-  saveSessionStore,
-} from "../../config/sessions/store.js";
+import { loadSessionEntry, replaceSessionEntry } from "../../config/sessions/session-accessor.js";
+import { clearSessionStoreCacheForTest } from "../../config/sessions/store.js";
 import type { SessionEntry } from "../../config/sessions/types.js";
 import {
   INTERNAL_RUNTIME_CONTEXT_BEGIN,
@@ -158,7 +155,7 @@ describe("persistSessionEntry", () => {
       if (current.pinnedAt === undefined) {
         delete currentEntry.pinnedAt;
       }
-      await saveSessionStore(storePath, { main: currentEntry }, { skipMaintenance: true });
+      await replaceSessionEntry({ sessionKey: "main", storePath }, currentEntry);
       const sessionStore = { main: staleEntry };
 
       const persisted = await persistSessionEntry({
@@ -178,7 +175,9 @@ describe("persistSessionEntry", () => {
       expect(persisted?.pinnedAt).toBe(expected.pinnedAt);
       expect(persisted?.updatedAt).toBeGreaterThanOrEqual(currentEntry.updatedAt);
       expect(sessionStore.main).toEqual(persisted);
-      expect(loadSessionStore(storePath, { skipCache: true }).main).toEqual(persisted);
+      expect(
+        loadSessionEntry({ sessionKey: "main", storePath, readConsistency: "latest" }),
+      ).toEqual(persisted);
     } finally {
       clearSessionStoreCacheForTest();
     }
@@ -202,7 +201,7 @@ describe("persistSessionEntry", () => {
         model: "gpt-5.4",
         sendPolicy: "deny",
       };
-      await saveSessionStore(storePath, { main: currentEntry }, { skipMaintenance: true });
+      await replaceSessionEntry({ sessionKey: "main", storePath }, currentEntry);
       const sessionStore = { main: initialEntry };
 
       const persisted = await persistSessionEntry({
@@ -225,7 +224,9 @@ describe("persistSessionEntry", () => {
       });
       expect(persisted?.elevatedLevel).toBeUndefined();
       expect(persisted?.inheritedToolAllow).toBeUndefined();
-      expect(loadSessionStore(storePath, { skipCache: true }).main).toEqual(persisted);
+      expect(
+        loadSessionEntry({ sessionKey: "main", storePath, readConsistency: "latest" }),
+      ).toEqual(persisted);
     } finally {
       clearSessionStoreCacheForTest();
     }
@@ -254,7 +255,9 @@ describe("persistSessionEntry", () => {
 
       expect(persisted).toBeUndefined();
       expect(sessionStore.main).toBeUndefined();
-      expect(loadSessionStore(storePath, { skipCache: true }).main).toBeUndefined();
+      expect(
+        loadSessionEntry({ sessionKey: "main", storePath, readConsistency: "latest" }),
+      ).toBeUndefined();
     } finally {
       clearSessionStoreCacheForTest();
     }
@@ -293,7 +296,9 @@ describe("persistSessionEntry", () => {
       expect(first).toBeUndefined();
       expect(second).toBeUndefined();
       expect(sessionStore.main).toBeUndefined();
-      expect(loadSessionStore(storePath, { skipCache: true }).main).toBeUndefined();
+      expect(
+        loadSessionEntry({ sessionKey: "main", storePath, readConsistency: "latest" }),
+      ).toBeUndefined();
     } finally {
       clearSessionStoreCacheForTest();
     }
