@@ -869,6 +869,34 @@ describe("signal outbound", () => {
     clearSignalApprovalReactionTargetsForTest();
   });
 
+  it("passes direct reply targets as Signal native quote metadata for durable sends", async () => {
+    const send = vi.fn(async () => ({
+      messageId: "signal-1",
+      receipt: createMessageReceiptFromOutboundResults({
+        results: [{ channel: "signal", messageId: "signal-1" }],
+        kind: "text",
+      }),
+    }));
+
+    await signalPlugin.message?.send?.text?.({
+      cfg: {} as OpenClawConfig,
+      to: "signal:+15551234567",
+      text: "quoted reply",
+      replyToId: "1700000000001",
+      deps: { signal: send },
+    } as Parameters<NonNullable<typeof signalPlugin.message.send.text>>[0] & {
+      deps: { signal: typeof send };
+    });
+
+    expect(send).toHaveBeenCalledWith("+15551234567", "quoted reply", {
+      cfg: {},
+      maxBytes: undefined,
+      accountId: undefined,
+      replyToId: "1700000000001",
+      replyToAuthor: "+15551234567",
+    });
+  });
+
   it("declares message adapter durable text and media with receipt proofs", async () => {
     const send = vi.fn(async (_to: string, _text: string, opts: { mediaUrl?: string } = {}) => {
       const messageId = opts.mediaUrl ? "signal-media-1" : "signal-text-1";

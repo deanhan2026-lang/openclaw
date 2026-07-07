@@ -958,6 +958,10 @@ async function buildSendPayloadParts(params: {
   if (!actionParams.replyTo && parsed.replyToId) {
     actionParams.replyTo = parsed.replyToId;
   }
+  const replyToIdAlias = readStringParam(actionParams, "replyToId");
+  if (!actionParams.replyTo && replyToIdAlias) {
+    actionParams.replyTo = replyToIdAlias;
+  }
   if (!actionParams.media) {
     actionParams.media = mergedMediaUrls[0] || undefined;
   }

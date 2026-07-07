@@ -100,6 +100,7 @@ async function sendSignalOutbound(params: {
   mediaReadFile?: (filePath: string) => Promise<Buffer>;
   accountId?: string;
   deps?: { [channelId: string]: unknown };
+  replyToId?: string | null;
 }) {
   const { send, maxBytes } = await resolveSignalSendContext(params);
   const to = resolveSignalSendTarget(params);
@@ -110,7 +111,24 @@ async function sendSignalOutbound(params: {
     ...(params.mediaReadFile ? { mediaReadFile: params.mediaReadFile } : {}),
     maxBytes,
     accountId: params.accountId ?? undefined,
+    ...(params.replyToId
+      ? {
+          replyToId: params.replyToId,
+          replyToAuthor: resolveDirectSignalReplyAuthor(to),
+        }
+      : {}),
   });
+}
+
+function resolveDirectSignalReplyAuthor(to: string): string | undefined {
+  if (inferSignalTargetChatType(to) !== "direct") {
+    return undefined;
+  }
+  const normalized = to
+    .replace(/^signal:/i, "")
+    .replace(/^uuid:/i, "")
+    .trim();
+  return normalized || undefined;
 }
 
 type SignalMessageContextExtras = {
@@ -147,6 +165,7 @@ const signalMessageAdapter = defineChannelMessageAdapter({
         text: ctx.text,
         accountId: ctx.accountId ?? undefined,
         deps: (ctx as typeof ctx & SignalMessageContextExtras).deps,
+        replyToId: ctx.replyToId ?? undefined,
       }),
     media: async (ctx) =>
       await sendSignalOutbound({
@@ -158,6 +177,7 @@ const signalMessageAdapter = defineChannelMessageAdapter({
         mediaReadFile: ctx.mediaReadFile,
         accountId: ctx.accountId ?? undefined,
         deps: (ctx as typeof ctx & SignalMessageContextExtras).deps,
+        replyToId: ctx.replyToId ?? undefined,
       }),
   },
 });

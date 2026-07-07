@@ -320,6 +320,26 @@ describe("runMessageAction core send routing", () => {
     });
   });
 
+  it("accepts replyToId as an alias for explicit reply targets", async () => {
+    const sendText = registerSlackTextPlugin();
+
+    await runMessageAction({
+      cfg: slackConfig,
+      action: "send",
+      params: {
+        channel: "slack",
+        target: "channel:C1",
+        message: "threaded",
+        replyToId: "child-1",
+      },
+      dryRun: false,
+    });
+
+    expect(firstMockArg(sendText, "send text")).toMatchObject({
+      replyToId: "child-1",
+    });
+  });
+
   it("uses best-effort delivery for implicit message-tool-only source replies", async () => {
     const sendText = registerSlackTextPlugin();
 
