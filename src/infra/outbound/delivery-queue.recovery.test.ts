@@ -550,6 +550,7 @@ describe("delivery-queue recovery", () => {
         accountId: "acct-1",
         payloads: [{ text: "maybe sent" }],
         replyToId: "root-message",
+        replyToAuthor: "uuid:sender-1",
         threadId: "thread-1",
         silent: true,
       },
@@ -603,6 +604,7 @@ describe("delivery-queue recovery", () => {
       accountId?: string;
       payloads?: unknown;
       replyToId?: string;
+      replyToAuthor?: string;
       effectiveReplyToId?: string;
       threadId?: string;
       silent?: boolean;
@@ -615,6 +617,7 @@ describe("delivery-queue recovery", () => {
     expect(reconcileInput.accountId).toBe("acct-1");
     expect(reconcileInput.payloads).toEqual([{ text: "maybe sent" }]);
     expect(reconcileInput.replyToId).toBe("root-message");
+    expect(reconcileInput.replyToAuthor).toBe("uuid:sender-1");
     expect(reconcileInput.effectiveReplyToId).toBe("hooked-root-message");
     expect(reconcileInput.threadId).toBe("thread-1");
     expect(reconcileInput.silent).toBe(true);
@@ -1120,6 +1123,7 @@ describe("delivery-queue recovery", () => {
         to: "+1",
         payloads: [{ text: "a" }],
         replyToId: "root-message",
+        replyToAuthor: "uuid:sender-1",
         replyToMode: "first",
         formatting: {
           textLimit: 1234,
@@ -1157,6 +1161,7 @@ describe("delivery-queue recovery", () => {
       gifPlayback?: boolean;
       silent?: boolean;
       replyToId?: string;
+      replyToAuthor?: string;
       replyToMode?: string;
       formatting?: unknown;
       gatewayClientScopes?: string[];
@@ -1167,6 +1172,7 @@ describe("delivery-queue recovery", () => {
     expect(deliverInput.gifPlayback).toBe(true);
     expect(deliverInput.silent).toBe(true);
     expect(deliverInput.replyToId).toBe("root-message");
+    expect(deliverInput.replyToAuthor).toBe("uuid:sender-1");
     expect(deliverInput.replyToMode).toBe("first");
     expect(deliverInput.formatting).toEqual({
       textLimit: 1234,

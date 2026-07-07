@@ -60,6 +60,7 @@ export type QueuedDeliveryPayload = {
   renderedBatchPlan?: QueuedRenderedMessageBatchPlan;
   threadId?: string | number | null;
   replyToId?: string | null;
+  replyToAuthor?: string | null;
   replyToMode?: ReplyToMode;
   formatting?: OutboundDeliveryFormattingOptions;
   identity?: OutboundIdentity;
@@ -116,6 +117,7 @@ export async function enqueueDelivery(
     renderedBatchPlan: params.renderedBatchPlan,
     threadId: params.threadId,
     replyToId: params.replyToId,
+    replyToAuthor: params.replyToAuthor,
     replyToMode: params.replyToMode,
     formatting: params.formatting,
     identity: params.identity,

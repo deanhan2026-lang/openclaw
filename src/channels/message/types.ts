@@ -173,6 +173,7 @@ export type ChannelMessageSendTextContext<TConfig = OpenClawConfig> = {
   accountId?: string | null;
   deps?: OutboundSendDeps;
   replyToId?: string | null;
+  replyToAuthor?: string | null;
   replyToIdSource?: "explicit" | "implicit";
   replyToMode?: ReplyToMode;
   threadId?: string | number | null;
@@ -286,6 +287,7 @@ export type ChannelMessageUnknownSendContext<TConfig = OpenClawConfig> = {
   payloads: readonly ReplyPayload[];
   renderedBatchPlan?: RenderedMessageBatchPlan;
   replyToId?: string | null;
+  replyToAuthor?: string | null;
   replyToMode?: ReplyToMode;
   threadId?: string | number | null;
   silent?: boolean;

@@ -7,6 +7,7 @@ import type { ReplyToMode } from "../../config/types.js";
 /** Per-payload reply target override passed to outbound channel adapters. */
 export type ReplyToOverride = {
   replyToId?: string | null | undefined;
+  replyToAuthor?: string | null | undefined;
   replyToIdSource?: ReplyToResolution["source"] | undefined;
 };
 
@@ -79,7 +80,7 @@ export function createReplyToDeliveryPolicy(params: {
     if (replyToConsumed) {
       // Single-use implicit reply targets apply to the first delivered payload only;
       // later payloads must not accidentally thread into the same source message.
-      return { ...overrides, replyToId: undefined };
+      return { ...overrides, replyToId: undefined, replyToAuthor: undefined };
     }
     replyToConsumed = true;
     return overrides;

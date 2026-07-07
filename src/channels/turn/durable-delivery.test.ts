@@ -25,6 +25,7 @@ vi.mock("../message/send.js", async (importOriginal) => {
 import type { FinalizedMsgContext } from "../../auto-reply/templating.js";
 import {
   deliverInboundReplyWithMessageSendContext,
+  resolveDurableInboundReplyToAuthor,
   resolveDurableInboundReplyToId,
 } from "./durable-delivery.js";
 
@@ -33,6 +34,8 @@ type SendDurableMessageBatchRequest = {
   channel?: string;
   to?: string;
   threadId?: string | number | null;
+  replyToId?: string | null;
+  replyToAuthor?: string | null;
   durability?: string;
   requireUnknownSendReconciliation?: boolean;
   gatewayClientScopes?: readonly string[];
@@ -123,6 +126,29 @@ describe("durable inbound reply delivery", () => {
     ).toBe("context-full-reply");
   });
 
+  it("resolves current-message reply authors from inbound sender context", () => {
+    expect(
+      resolveDurableInboundReplyToAuthor({
+        resolvedReplyToId: "context-full-reply",
+        ctxPayload: ctxPayload({
+          ReplyToIdFull: "context-full-reply",
+          ReplyToId: "context-reply",
+          SenderId: "uuid:sender-1",
+        }),
+      }),
+    ).toBe("uuid:sender-1");
+
+    expect(
+      resolveDurableInboundReplyToAuthor({
+        resolvedReplyToId: "different-reply",
+        ctxPayload: ctxPayload({
+          ReplyToIdFull: "context-full-reply",
+          SenderId: "uuid:sender-1",
+        }),
+      }),
+    ).toBeUndefined();
+  });
+
   it("preserves explicit null thread targets instead of falling back to context thread", async () => {
     await deliverInboundReplyWithMessageSendContext({
       cfg: {},
@@ -167,6 +193,32 @@ describe("durable inbound reply delivery", () => {
     expect(mocks.sendDurableMessageBatch).toHaveBeenCalledTimes(1);
     expect(latestSendDurableMessageBatchRequest().durability).toBe("best_effort");
     expect(latestSendDurableMessageBatchRequest().requireUnknownSendReconciliation).toBeUndefined();
+  });
+
+  it("passes current-message reply author into durable sends", async () => {
+    await deliverInboundReplyWithMessageSendContext({
+      cfg: {},
+      channel: "signal",
+      agentId: "main",
+      info: { kind: "final" },
+      payload: { text: "final" },
+      ctxPayload: ctxPayload({
+        OriginatingTo: "group:signal-group",
+        ReplyToId: "1700000000001",
+        SenderId: "uuid:sender-1",
+      }),
+    });
+
+    expect(mocks.resolveOutboundDurableFinalDeliverySupport).toHaveBeenCalledTimes(1);
+    expect(latestDeliverySupportRequest().requirements).toEqual({
+      text: true,
+      replyTo: true,
+      messageSendingHooks: true,
+    });
+    expect(mocks.sendDurableMessageBatch).toHaveBeenCalledTimes(1);
+    const request = latestSendDurableMessageBatchRequest();
+    expect(request.replyToId).toBe("1700000000001");
+    expect(request.replyToAuthor).toBe("uuid:sender-1");
   });
 
   it("uses required durability when a caller explicitly requires unknown-send reconciliation", async () => {

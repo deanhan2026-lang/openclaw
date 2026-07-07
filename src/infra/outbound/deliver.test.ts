@@ -2406,6 +2406,45 @@ describe("deliverOutboundPayloads", () => {
     ).toEqual([undefined, "payload-reply"]);
   });
 
+  it("clears the ambient reply author when a payload retargets replyToId", async () => {
+    const sendText = vi.fn().mockImplementation(async ({ text }: { text: string }) => ({
+      channel: "matrix" as const,
+      messageId: text,
+      roomId: "!room",
+    }));
+    setActivePluginRegistry(
+      createTestRegistry([
+        {
+          pluginId: "matrix",
+          source: "test",
+          plugin: createOutboundTestPlugin({
+            id: "matrix",
+            outbound: {
+              deliveryMode: "direct",
+              sendText,
+            },
+          }),
+        },
+      ]),
+    );
+
+    await deliverOutboundPayloads({
+      cfg: {},
+      channel: "matrix",
+      to: "!room",
+      payloads: [{ text: "explicit", replyToId: "payload-reply" }],
+      replyToId: "ambient-reply",
+      replyToAuthor: "ambient-author",
+      replyToMode: "all",
+    });
+
+    expect(sendText).toHaveBeenCalledTimes(1);
+    expect(sendText.mock.calls[0]?.[0]).toMatchObject({
+      replyToId: "payload-reply",
+      replyToAuthor: undefined,
+    });
+  });
+
   it("does not let explicit payload replies consume the implicit single-use reply slot", async () => {
     hookMocks.runner.hasHooks.mockImplementation(
       (hookName?: string) => hookName === "message_sending",

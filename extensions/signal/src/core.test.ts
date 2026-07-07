@@ -373,11 +373,31 @@ describe("signal outbound", () => {
         to: "+15551234567",
         text: "a".repeat(5000),
         deps: { signal: send },
+        replyToId: "1700000000004",
+        replyToIdSource: "implicit",
+        replyToMode: "first",
         onDeliveryResult,
       }),
     ).rejects.toThrow("second Signal chunk failed");
 
     expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenNthCalledWith(
+      1,
+      "+15551234567",
+      expect.any(String),
+      expect.objectContaining({
+        replyToId: "1700000000004",
+        replyToAuthor: "+15551234567",
+      }),
+    );
+    expect(send).toHaveBeenNthCalledWith(
+      2,
+      "+15551234567",
+      expect.any(String),
+      expect.not.objectContaining({
+        replyToId: "1700000000004",
+      }),
+    );
     expect(onDeliveryResult).toHaveBeenCalledTimes(1);
     expect(onDeliveryResult).toHaveBeenCalledWith(
       expect.objectContaining({ channel: "signal", messageId: "signal-1" }),
@@ -869,7 +889,7 @@ describe("signal outbound", () => {
     clearSignalApprovalReactionTargetsForTest();
   });
 
-  it("passes direct reply targets as Signal native quote metadata for durable sends", async () => {
+  it("message adapter sends direct reply targets as Signal native quote metadata", async () => {
     const send = vi.fn(async () => ({
       messageId: "signal-1",
       receipt: createMessageReceiptFromOutboundResults({
@@ -888,16 +908,131 @@ describe("signal outbound", () => {
       deps: { signal: typeof send };
     });
 
-    expect(send).toHaveBeenCalledWith("+15551234567", "quoted reply", {
-      cfg: {},
-      maxBytes: undefined,
-      accountId: undefined,
-      replyToId: "1700000000001",
-      replyToAuthor: "+15551234567",
-    });
+    expect(send).toHaveBeenCalledWith(
+      "+15551234567",
+      "quoted reply",
+      expect.objectContaining({
+        cfg: {},
+        replyToId: "1700000000001",
+        replyToAuthor: "+15551234567",
+      }),
+    );
   });
 
-  it("declares message adapter durable text and media with receipt proofs", async () => {
+  it("passes direct reply targets as Signal native quote metadata for formatted text", async () => {
+    const send = vi.fn(async () => ({
+      messageId: "signal-1",
+      receipt: createMessageReceiptFromOutboundResults({
+        results: [{ channel: "signal", messageId: "signal-1" }],
+        kind: "text",
+      }),
+    }));
+
+    await signalPlugin.outbound?.sendFormattedText?.({
+      cfg: {} as OpenClawConfig,
+      to: "signal:+15551234567",
+      text: "formatted quoted reply",
+      replyToId: "1700000000002",
+      deps: { signal: send },
+    });
+
+    expect(send).toHaveBeenCalledWith(
+      "+15551234567",
+      "formatted quoted reply",
+      expect.objectContaining({
+        cfg: {},
+        replyToId: "1700000000002",
+        replyToAuthor: "+15551234567",
+        textMode: "plain",
+      }),
+    );
+  });
+
+  it("passes direct reply targets as Signal native quote metadata for formatted media", async () => {
+    const send = vi.fn(async () => ({
+      messageId: "signal-1",
+      receipt: createMessageReceiptFromOutboundResults({
+        results: [{ channel: "signal", messageId: "signal-1" }],
+        kind: "media",
+      }),
+    }));
+
+    await signalPlugin.outbound?.sendFormattedMedia?.({
+      cfg: {} as OpenClawConfig,
+      to: "signal:+15551234567",
+      text: "media quoted reply",
+      mediaUrl: "file:///tmp/signal-proof.png",
+      replyToId: "1700000000003",
+      deps: { signal: send },
+    });
+
+    expect(send).toHaveBeenCalledWith(
+      "+15551234567",
+      "media quoted reply",
+      expect.objectContaining({
+        cfg: {},
+        mediaUrl: "file:///tmp/signal-proof.png",
+        replyToId: "1700000000003",
+        replyToAuthor: "+15551234567",
+        textMode: "plain",
+      }),
+    );
+  });
+
+  it("passes direct reply targets as Signal native quote metadata for attached-result sends", async () => {
+    const send = vi.fn(async (_to: string, _text: string, opts: { mediaUrl?: string } = {}) => ({
+      messageId: opts.mediaUrl ? "signal-media-1" : "signal-text-1",
+      receipt: createMessageReceiptFromOutboundResults({
+        results: [
+          {
+            channel: "signal",
+            messageId: opts.mediaUrl ? "signal-media-1" : "signal-text-1",
+          },
+        ],
+        kind: opts.mediaUrl ? "media" : "text",
+      }),
+    }));
+
+    await signalPlugin.outbound?.sendText?.({
+      cfg: {} as OpenClawConfig,
+      to: "signal:+15551234567",
+      text: "attached quoted reply",
+      replyToId: "1700000000004",
+      deps: { signal: send },
+    });
+    await signalPlugin.outbound?.sendMedia?.({
+      cfg: {} as OpenClawConfig,
+      to: "signal:+15551234567",
+      text: "attached media reply",
+      mediaUrl: "file:///tmp/signal-proof.png",
+      replyToId: "1700000000005",
+      deps: { signal: send },
+    });
+
+    expect(send).toHaveBeenNthCalledWith(
+      1,
+      "+15551234567",
+      "attached quoted reply",
+      expect.objectContaining({
+        cfg: {},
+        replyToId: "1700000000004",
+        replyToAuthor: "+15551234567",
+      }),
+    );
+    expect(send).toHaveBeenNthCalledWith(
+      2,
+      "+15551234567",
+      "attached media reply",
+      expect.objectContaining({
+        cfg: {},
+        mediaUrl: "file:///tmp/signal-proof.png",
+        replyToId: "1700000000005",
+        replyToAuthor: "+15551234567",
+      }),
+    );
+  });
+
+  it("declares message adapter durable text, media, and replyTo with receipt proofs", async () => {
     const send = vi.fn(async (_to: string, _text: string, opts: { mediaUrl?: string } = {}) => {
       const messageId = opts.mediaUrl ? "signal-media-1" : "signal-text-1";
       return {
@@ -948,6 +1083,30 @@ describe("signal outbound", () => {
           });
           expect(result?.receipt.platformMessageIds).toEqual(["signal-media-1"]);
         },
+        replyTo: async () => {
+          const result = await signalPlugin.message?.send?.text?.({
+            cfg: {} as OpenClawConfig,
+            to: "signal:group:group-1",
+            text: "reply",
+            replyToId: "1700000000006",
+            replyToAuthor: "uuid:sender-1",
+            deps,
+          } as Parameters<NonNullable<typeof signalPlugin.message.send.text>>[0] & {
+            deps: typeof deps;
+          });
+          expect(send).toHaveBeenLastCalledWith(
+            "group:group-1",
+            "reply",
+            expect.objectContaining({
+              cfg: {},
+              maxBytes: undefined,
+              accountId: undefined,
+              replyToId: "1700000000006",
+              replyToAuthor: "uuid:sender-1",
+            }),
+          );
+          expect(result?.receipt.platformMessageIds).toEqual(["signal-text-1"]);
+        },
       },
     });
 
@@ -957,7 +1116,7 @@ describe("signal outbound", () => {
       { capability: "poll", status: "not_declared" },
       { capability: "payload", status: "not_declared" },
       { capability: "silent", status: "not_declared" },
-      { capability: "replyTo", status: "not_declared" },
+      { capability: "replyTo", status: "verified" },
       { capability: "thread", status: "not_declared" },
       { capability: "nativeQuote", status: "not_declared" },
       { capability: "messageSendingHooks", status: "not_declared" },
