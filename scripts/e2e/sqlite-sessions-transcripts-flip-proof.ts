@@ -1835,8 +1835,9 @@ async function waitForAgentRunSettled(
   if (result.status === "ok") {
     return;
   }
+  const terminalLifecycleStatus = result.status === "timeout" || result.status === "error";
   if (
-    result.status === "timeout" &&
+    terminalLifecycleStatus &&
     (result.stopReason === "rpc" || result.stopReason === "stop") &&
     typeof result.endedAt === "number"
   ) {
