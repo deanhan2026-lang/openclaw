@@ -281,7 +281,7 @@ import {
 import type { ModelAliasIndex } from "../../agents/model-selection.js";
 import type { ModelDefinitionConfig, OpenClawConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
-import { loadSessionStore, saveSessionStore } from "../../config/sessions/store.js";
+import { loadSessionEntry, replaceSessionEntry } from "../../config/sessions/session-accessor.js";
 import {
   clearInternalHooks,
   registerInternalHook,
@@ -1641,7 +1641,7 @@ describe("handleDirectiveOnly model persist behavior (fixes #1435)", () => {
       providerOverride: "openai",
       modelOverride: "gpt-5.5",
     };
-    await saveSessionStore(storePath, { [sessionKey]: concurrentEntry }, { skipMaintenance: true });
+    await replaceSessionEntry({ sessionKey, storePath }, concurrentEntry);
     const sessionStore = { [sessionKey]: sessionEntry };
     const persistenceState = { sessionChangesApplied: true };
 
@@ -1669,9 +1669,7 @@ describe("handleDirectiveOnly model persist behavior (fixes #1435)", () => {
       });
       expect(sessionStore[sessionKey]?.liveModelSwitchPending).toBeUndefined();
       expect(sessionEntry).toEqual(sessionStore[sessionKey]);
-      expect(loadSessionStore(storePath, { skipCache: true })[sessionKey]).toEqual(
-        sessionStore[sessionKey],
-      );
+      expect(loadSessionEntry({ sessionKey, storePath })).toEqual(sessionStore[sessionKey]);
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
@@ -1686,7 +1684,7 @@ describe("handleDirectiveOnly model persist behavior (fixes #1435)", () => {
       updatedAt: sessionEntry.updatedAt + 1,
       elevatedLevel: "full",
     };
-    await saveSessionStore(storePath, { [sessionKey]: rotatedEntry }, { skipMaintenance: true });
+    await replaceSessionEntry({ sessionKey, storePath }, rotatedEntry);
     const sessionStore = { [sessionKey]: sessionEntry };
 
     try {
@@ -1723,7 +1721,7 @@ describe("handleDirectiveOnly model persist behavior (fixes #1435)", () => {
       updatedAt: sessionEntry.updatedAt + 1,
       elevatedLevel: "full",
     };
-    await saveSessionStore(storePath, { [sessionKey]: concurrentEntry }, { skipMaintenance: true });
+    await replaceSessionEntry({ sessionKey, storePath }, concurrentEntry);
 
     try {
       const result = await handleDirectiveOnly(
@@ -1764,7 +1762,7 @@ describe("handleDirectiveOnly model persist behavior (fixes #1435)", () => {
       updatedAt: sessionEntry.updatedAt + 1,
       thinkingLevel: "low",
     };
-    await saveSessionStore(storePath, { [sessionKey]: concurrentEntry }, { skipMaintenance: true });
+    await replaceSessionEntry({ sessionKey, storePath }, concurrentEntry);
 
     try {
       const result = await handleDirectiveOnly(
@@ -1779,7 +1777,7 @@ describe("handleDirectiveOnly model persist behavior (fixes #1435)", () => {
       expect(result?.text).toContain("Session settings were not applied");
       expect(sessionEntry).toMatchObject({ thinkingLevel: "low" });
       expect(sessionEntry.fastMode).toBeUndefined();
-      expect(loadSessionStore(storePath, { skipCache: true })[sessionKey]).toEqual(concurrentEntry);
+      expect(loadSessionEntry({ sessionKey, storePath })).toEqual(concurrentEntry);
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true });
     }
@@ -2267,7 +2265,7 @@ describe("persistInlineDirectives session directive persistence policy", () => {
       updatedAt: sessionEntry.updatedAt + 1,
       modelOverride: "gpt-5.5",
     };
-    await saveSessionStore(storePath, { [sessionKey]: concurrentEntry }, { skipMaintenance: true });
+    await replaceSessionEntry({ sessionKey, storePath }, concurrentEntry);
     const directives = parseInlineDirectives("hello /model openai/gpt-4o");
 
     try {
@@ -2320,7 +2318,7 @@ describe("persistInlineDirectives session directive persistence policy", () => {
       providerOverride: "openai",
       modelOverride: "gpt-5.5",
     };
-    await saveSessionStore(storePath, { [sessionKey]: concurrentEntry }, { skipMaintenance: true });
+    await replaceSessionEntry({ sessionKey, storePath }, concurrentEntry);
     const sessionStore = { [sessionKey]: sessionEntry };
     const directives = parseInlineDirectives("hello /model openai/gpt-4o");
     const patchEvents: InternalHookEvent[] = [];
