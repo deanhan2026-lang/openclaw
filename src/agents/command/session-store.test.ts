@@ -1127,7 +1127,7 @@ describe("updateSessionStoreAfterAgentRun", () => {
           totalTokensFresh: true,
         },
       };
-      await fs.writeFile(storePath, JSON.stringify(sessionStore, null, 2));
+      await replaceSessionEntry({ storePath, sessionKey }, sessionStore[sessionKey]!);
 
       await updateSessionStoreAfterAgentRun({
         cfg: {} as OpenClawConfig,
@@ -1654,7 +1654,7 @@ describe("updateSessionStoreAfterAgentRun", () => {
           lastActivityAt,
         },
       };
-      await fs.writeFile(storePath, JSON.stringify(sessionStore, null, 2));
+      await replaceSessionEntry({ storePath, sessionKey }, sessionStore[sessionKey]!);
 
       await updateSessionStoreAfterAgentRun({
         cfg,

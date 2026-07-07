@@ -1098,35 +1098,6 @@ describe("gateway agent handler", () => {
     expect(mocks.agentCommand).not.toHaveBeenCalled();
   });
 
-  it("uses single-entry persistence for ordinary gateway admission touches", async () => {
-    mockMainSessionEntry({});
-    let capturedOptions:
-      | {
-          resolveSingleEntryPersistence?: (result: unknown) => unknown;
-        }
-      | undefined;
-    let persistedResult: unknown;
-    mocks.updateSessionStore.mockImplementation(async (_path, updater, opts) => {
-      const store: Record<string, Record<string, unknown>> = {
-        "agent:main:main": buildExistingMainStoreEntry(),
-      };
-      persistedResult = await updater(store);
-      capturedOptions = opts;
-      return persistedResult;
-    });
-    mocks.agentCommand.mockResolvedValue({
-      payloads: [{ text: "ok" }],
-      meta: { durationMs: 100 },
-    });
-
-    await runMainAgent("hi", "idem-single-entry-persist");
-
-    expect(capturedOptions?.resolveSingleEntryPersistence?.(persistedResult)).toMatchObject({
-      sessionKey: "agent:main:main",
-      entry: persistedResult,
-    });
-  });
-
   it("passes a canonical user-turn recorder to gateway agent runs", async () => {
     primeMainAgentRun();
 
@@ -1571,6 +1542,9 @@ describe("gateway agent handler", () => {
       storePath: "/tmp/sessions.json",
       entry: { sessionId: "restored-session", updatedAt: 2 },
       canonicalKey: "agent:main:work",
+      // Post-flip the accessor target carries the alias set prepared at request
+      // start; freshest-entry resolution happens inside the patch transaction.
+      storeKeys: ["agent:main:work", "agent:main:main"],
     });
     const store = {
       "agent:main:work": {
@@ -1599,42 +1573,6 @@ describe("gateway agent handler", () => {
     expect(mocks.agentCommand).toHaveBeenCalled();
     expect(store["agent:main:work"]?.archivedAt).toBeUndefined();
     expect(store["agent:main:main"]).toBeUndefined();
-  });
-
-  it("disables single-entry persistence when admission prunes legacy store keys", async () => {
-    mocks.loadConfigReturn = {
-      session: { mainKey: "work" },
-      agents: { list: [{ id: "main", default: true }] },
-    };
-    mocks.loadSessionEntry.mockReturnValue({
-      cfg: mocks.loadConfigReturn,
-      storePath: "/tmp/sessions.json",
-      entry: { sessionId: "existing-session-id", updatedAt: Date.now() },
-      canonicalKey: "agent:main:work",
-    });
-    let capturedOptions:
-      | {
-          resolveSingleEntryPersistence?: (result: unknown) => unknown;
-        }
-      | undefined;
-    let persistedResult: unknown;
-    mocks.updateSessionStore.mockImplementation(async (_path, updater, opts) => {
-      const store: Record<string, Record<string, unknown>> = {
-        "agent:main:work": buildExistingMainStoreEntry({ updatedAt: 100 }),
-        "agent:main:main": buildExistingMainStoreEntry({ updatedAt: 50 }),
-      };
-      persistedResult = await updater(store);
-      capturedOptions = opts;
-      return persistedResult;
-    });
-    mocks.agentCommand.mockResolvedValue({
-      payloads: [{ text: "ok" }],
-      meta: { durationMs: 100 },
-    });
-
-    await runMainAgent("hi", "idem-single-entry-legacy-prune");
-
-    expect(capturedOptions?.resolveSingleEntryPersistence?.(persistedResult)).toBeUndefined();
   });
 
   it("does not persist a gateway user-turn recorder after the session key is rebound", async () => {
