@@ -34,8 +34,8 @@ Barnacle may act when:
 Barnacle runs from trusted repository workflow code. It does not check out or
 run contributor code.
 
-Most routing labels are maintainer or automation signals. Contributors do not
-need to add labels themselves.
+Most routing labels are maintainer or automation signals, so contributors do
+not need to add labels themselves.
 
 ## ClawSweeper
 
