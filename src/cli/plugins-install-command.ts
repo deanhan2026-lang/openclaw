@@ -46,6 +46,10 @@ import { resolveUserPath, shortenHomePath } from "../utils.js";
 import { resolveClawHubRiskAcknowledgementCliOptions } from "./clawhub-risk-acknowledgement.js";
 import { formatCliCommand } from "./command-format.js";
 import { looksLikeLocalInstallSpec } from "./install-spec.js";
+import {
+  confirmNonClawHubInstall,
+  type NonClawHubInstallSourceClass,
+} from "./non-clawhub-install-acknowledgement.js";
 import { resolvePinnedNpmInstallRecordForCli } from "./npm-resolution.js";
 import {
   resolvePluginInstallInvalidConfigPolicy,
@@ -864,6 +868,7 @@ export async function runPluginInstallCommand(params: {
   raw: string;
   opts: InstallSafetyOverrides & {
     acknowledgeClawHubRisk?: boolean;
+    acknowledgeNonClawHubInstall?: boolean;
     force?: boolean;
     link?: boolean;
     pin?: boolean;
@@ -993,8 +998,21 @@ export async function runPluginInstallCommand(params: {
   const installMode = resolveInstallMode(opts.force);
   const safetyOverrides = resolveInstallSafetyOverrides({ ...opts, config: cfg });
   const extensionsDir = resolveDefaultPluginExtensionsDir();
+  const acknowledgeNonClawHubSource = async (
+    sourceClass: NonClawHubInstallSourceClass,
+    spec: string,
+  ): Promise<boolean> =>
+    await confirmNonClawHubInstall({
+      acknowledged: opts.acknowledgeNonClawHubInstall,
+      runtime,
+      sourceClass,
+      spec,
+    });
 
   if (opts.marketplace) {
+    if (!(await acknowledgeNonClawHubSource("marketplace", `${raw} from ${opts.marketplace}`))) {
+      return runtime.exit(1);
+    }
     const result = await installPluginFromMarketplace({
       ...safetyOverrides,
       marketplace: opts.marketplace,
@@ -1028,6 +1046,14 @@ export async function runPluginInstallCommand(params: {
   }
 
   if (fs.existsSync(resolved)) {
+    if (
+      !(await acknowledgeNonClawHubSource(
+        resolveArchiveKind(resolved) ? "local-archive" : "local-path",
+        resolved,
+      ))
+    ) {
+      return runtime.exit(1);
+    }
     const fullyBlockedReason = resolveFullyBlockedConfigMutationReason(snapshot);
     if (fullyBlockedReason) {
       runtime.error(fullyBlockedReason);
@@ -1182,6 +1208,9 @@ export async function runPluginInstallCommand(params: {
       );
       return runtime.exit(1);
     }
+    if (!(await acknowledgeNonClawHubSource("npm", npmPrefixSpec))) {
+      return runtime.exit(1);
+    }
     const officialNpmTrust = resolveOfficialExternalNpmPackageTrust({
       npmSpec: npmPrefixSpec,
       findOfficialExternalPackage: findTrustedCatalogPackageInstall,
@@ -1219,6 +1248,9 @@ export async function runPluginInstallCommand(params: {
       );
       return runtime.exit(1);
     }
+    if (!(await acknowledgeNonClawHubSource("npm-pack", raw))) {
+      return runtime.exit(1);
+    }
     const npmPackResult = await tryInstallPluginFromNpmPackArchive({
       snapshot,
       installMode,
@@ -1235,6 +1267,9 @@ export async function runPluginInstallCommand(params: {
   }
 
   if (gitSpec) {
+    if (!(await acknowledgeNonClawHubSource("git", raw))) {
+      return runtime.exit(1);
+    }
     const gitResult = await tryInstallPluginFromGitSpec({
       snapshot,
       installMode,
@@ -1290,6 +1325,9 @@ export async function runPluginInstallCommand(params: {
   }
 
   if (officialExternalPlan) {
+    if (!(await acknowledgeNonClawHubSource("npm", officialExternalPlan.npmSpec))) {
+      return runtime.exit(1);
+    }
     const npmResult = await tryInstallPluginOrHookPackFromNpmSpec({
       snapshot,
       installMode,
@@ -1347,6 +1385,9 @@ export async function runPluginInstallCommand(params: {
     npmSpec: raw,
     findOfficialExternalPackage: findTrustedCatalogPackageInstall,
   });
+  if (!(await acknowledgeNonClawHubSource("npm", raw))) {
+    return runtime.exit(1);
+  }
   const npmResult = await tryInstallPluginOrHookPackFromNpmSpec({
     snapshot,
     installMode,

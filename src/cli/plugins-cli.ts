@@ -14,12 +14,17 @@ type PluginUpdateOptions = {
   dangerouslyForceUnsafeInstall?: boolean;
 };
 
-type CommanderClawHubRiskOptions = Record<string, unknown> & {
+type CommanderInstallRiskOptions = Record<string, unknown> & {
   acknowledgeClawhubRisk?: boolean;
+  acknowledgeNonClawhubInstall?: boolean;
 };
 
-function normalizeCommanderClawHubRiskOption(opts: CommanderClawHubRiskOptions): boolean {
+function normalizeCommanderClawHubRiskOption(opts: CommanderInstallRiskOptions): boolean {
   return opts.acknowledgeClawhubRisk === true || opts.acknowledgeClawHubRisk === true;
+}
+
+function normalizeCommanderNonClawHubInstallOption(opts: CommanderInstallRiskOptions): boolean {
+  return opts.acknowledgeNonClawhubInstall === true || opts.acknowledgeNonClawHubInstall === true;
 }
 
 export type PluginMarketplaceListOptions = {
@@ -185,13 +190,18 @@ export function registerPluginsCli(program: Command) {
       false,
     )
     .option(
+      "--acknowledge-non-clawhub-install",
+      "Acknowledge non-ClawHub plugin install provenance without prompting",
+      false,
+    )
+    .option(
       "--marketplace <source>",
       "Install a Claude marketplace plugin from a local repo/path or git/GitHub source",
     )
     .action(
       async (
         raw: string,
-        opts: CommanderClawHubRiskOptions & {
+        opts: CommanderInstallRiskOptions & {
           dangerouslyForceUnsafeInstall?: boolean;
           force?: boolean;
           link?: boolean;
@@ -203,6 +213,7 @@ export function registerPluginsCli(program: Command) {
         await runPluginsInstallAction(raw, {
           ...opts,
           acknowledgeClawHubRisk: normalizeCommanderClawHubRiskOption(opts),
+          acknowledgeNonClawHubInstall: normalizeCommanderNonClawHubInstallOption(opts),
         });
       },
     );

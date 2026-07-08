@@ -81,6 +81,10 @@ export type CrestodianOperationResult = {
   followUp?: Extract<CrestodianOperation, { kind: "model-setup" }>;
 };
 
+export type CrestodianPluginInstallOptions = {
+  acknowledgeNonClawHubInstall?: boolean;
+};
+
 /** Injectable command dependencies used by tests and alternate runners. */
 export type CrestodianCommandDeps = {
   formatOverview?: CrestodianOverviewFormatter;
@@ -105,7 +109,11 @@ export type CrestodianCommandDeps = {
   runGatewayRestart?: () => Promise<void>;
   runGatewayStart?: () => Promise<void>;
   runGatewayStop?: () => Promise<void>;
-  runPluginInstall?: (spec: string, runtime: RuntimeEnv) => Promise<void>;
+  runPluginInstall?: (
+    spec: string,
+    runtime: RuntimeEnv,
+    options?: CrestodianPluginInstallOptions,
+  ) => Promise<void>;
   runPluginUninstall?: (pluginId: string, runtime: RuntimeEnv) => Promise<void>;
   runPluginsList?: (runtime: RuntimeEnv) => Promise<void>;
   runPluginsSearch?: (query: string, runtime: RuntimeEnv) => Promise<void>;
@@ -845,11 +853,23 @@ async function executePluginInstall(
     run: async (ctx) => {
       const runPluginInstall =
         ctx.deps?.runPluginInstall ??
-        (async (spec: string, pluginRuntime: RuntimeEnv) => {
+        (async (
+          spec: string,
+          pluginRuntime: RuntimeEnv,
+          installOptions?: CrestodianPluginInstallOptions,
+        ) => {
           const { runPluginInstallCommand } = await import("../cli/plugins-install-command.js");
-          await runPluginInstallCommand({ raw: spec, opts: {}, runtime: pluginRuntime });
+          await runPluginInstallCommand({
+            raw: spec,
+            opts: {
+              acknowledgeNonClawHubInstall: installOptions?.acknowledgeNonClawHubInstall === true,
+            },
+            runtime: pluginRuntime,
+          });
         });
-      await runPluginInstall(operation.spec, createNoExitRuntime(ctx.runtime));
+      await runPluginInstall(operation.spec, createNoExitRuntime(ctx.runtime), {
+        acknowledgeNonClawHubInstall: opts.approved === true,
+      });
       return { summary: `Installed plugin ${operation.spec}`, details: { spec: operation.spec } };
     },
   });

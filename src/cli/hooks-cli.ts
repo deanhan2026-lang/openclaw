@@ -47,6 +47,17 @@ type HooksUpdateOptions = {
   dryRun?: boolean;
 };
 
+type HooksInstallOptions = {
+  acknowledgeNonClawHubInstall?: boolean;
+  acknowledgeNonClawhubInstall?: boolean;
+  link?: boolean;
+  pin?: boolean;
+};
+
+function normalizeHooksNonClawHubInstallOption(opts: HooksInstallOptions): boolean {
+  return opts.acknowledgeNonClawhubInstall === true || opts.acknowledgeNonClawHubInstall === true;
+}
+
 function mergeHookEntries(pluginEntries: HookEntry[], workspaceEntries: HookEntry[]): HookEntry[] {
   return resolveHookEntries([...pluginEntries, ...workspaceEntries]);
 }
@@ -565,11 +576,23 @@ export function registerHooksCli(program: Command): void {
     .argument("<path-or-spec>", "Path to a hook pack or npm package spec")
     .option("-l, --link", "Link a local path instead of copying", false)
     .option("--pin", "Record npm installs as exact resolved <name>@<version>", false)
-    .action(async (raw: string, opts: { link?: boolean; pin?: boolean }) => {
+    .option(
+      "--acknowledge-non-clawhub-install",
+      "Acknowledge non-ClawHub hook pack install provenance without prompting",
+      false,
+    )
+    .action(async (raw: string, opts: HooksInstallOptions) => {
       defaultRuntime.log(
         theme.warn("`openclaw hooks install` is deprecated; use `openclaw plugins install`."),
       );
-      await runPluginInstallCommand({ raw, opts, invalidateRuntimeCache: false });
+      await runPluginInstallCommand({
+        raw,
+        opts: {
+          ...opts,
+          acknowledgeNonClawHubInstall: normalizeHooksNonClawHubInstallOption(opts),
+        },
+        invalidateRuntimeCache: false,
+      });
     });
 
   hooks

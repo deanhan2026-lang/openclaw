@@ -33,7 +33,7 @@ Manage Gateway plugins, hook packs, and compatible bundles.
 ```bash
 openclaw plugins list [--enabled] [--verbose] [--json]
 openclaw plugins search <query> [--limit <n>] [--json]
-openclaw plugins install <path-or-spec> [--link] [--force] [--pin] [--marketplace <source>]
+openclaw plugins install <path-or-spec> [--link] [--force] [--pin] [--marketplace <source>] [--acknowledge-non-clawhub-install]
 openclaw plugins inspect <id> [--runtime] [--json]
 openclaw plugins inspect --all [--runtime] [--json]
 openclaw plugins info <id>                    # alias for inspect
@@ -134,6 +134,7 @@ openclaw plugins install <plugin> --marketplace <name>      # marketplace (expli
 openclaw plugins install <package> --force                  # overwrite existing install
 openclaw plugins install <package> --pin                    # pin resolved npm version
 openclaw plugins install clawhub:<package> --acknowledge-clawhub-risk
+openclaw plugins install npm:<package> --acknowledge-non-clawhub-install
 openclaw plugins install <package> --dangerously-force-unsafe-install
 ```
 
@@ -143,6 +144,16 @@ sources with guarded environment variables. See
 
 <Warning>
 Bare package names install from npm by default during the launch cutover, unless they match a bundled or official plugin id, in which case OpenClaw uses that local/official copy instead of hitting the npm registry. Use `npm:<package>` when you deliberately want an external npm package instead. Use `clawhub:<package>` for ClawHub. Treat plugin installs like running code; prefer pinned versions.
+</Warning>
+
+<Warning>
+ClawHub installs carry ClawHub package trust metadata. Installs from npm,
+`npm-pack:`, git, local paths or archives, and marketplace sources are outside
+ClawHub review. Interactive installs warn and ask before continuing.
+Noninteractive installs must pass `--acknowledge-non-clawhub-install` after you
+review and trust the source. This acknowledgement is separate from
+`--acknowledge-clawhub-risk`, which only applies to risky ClawHub release trust
+warnings.
 </Warning>
 
 `plugins search` queries ClawHub for installable `code-plugin` and

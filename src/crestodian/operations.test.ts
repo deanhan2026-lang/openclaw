@@ -582,6 +582,32 @@ describe("parseCrestodianOperation", () => {
     );
   });
 
+  it("passes approval as non-ClawHub acknowledgement for npm plugin installs", async () => {
+    const tempDir = opTempDirs.make("crestodian-plugin-install-ack-");
+    setTestEnvValue("OPENCLAW_STATE_DIR", tempDir);
+    const { runtime } = createCrestodianTestRuntime();
+    const runPluginInstall = vi.fn(async (spec: string, pluginRuntime: RuntimeEnv) => {
+      pluginRuntime.log(`installed ${spec}`);
+    });
+
+    const result = await executeCrestodianOperation(
+      { kind: "plugin-install", spec: "npm:@openclaw/demo" },
+      runtime,
+      {
+        approved: true,
+        deps: { runPluginInstall },
+      },
+    );
+
+    expect(result.applied).toBe(true);
+    const installCall = requireFirstMockCall(runPluginInstall, "runPluginInstall");
+    expect(installCall[0]).toBe("npm:@openclaw/demo");
+    expectRuntimeArg(installCall[1]);
+    expect(installCall[2]).toEqual({
+      acknowledgeNonClawHubInstall: true,
+    });
+  });
+
   it("uninstalls plugins only after approval and audits the write", async () => {
     const tempDir = opTempDirs.make("crestodian-plugin-uninstall-");
     setTestEnvValue("OPENCLAW_STATE_DIR", tempDir);
