@@ -40,7 +40,7 @@ not need to add labels themselves.
 ## ClawSweeper
 
 ClawSweeper is the AI-assisted review and maintenance bot for OpenClaw
-repositories. It can review PRs, assess proof, leave durable review comments,
+repositories. It can review PRs, evaluate proof, leave durable review comments,
 and help maintainers with guarded repair or automerge flows.
 
 A positive ClawSweeper result is supporting evidence, not maintainer approval.
