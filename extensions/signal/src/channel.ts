@@ -124,14 +124,11 @@ async function sendSignalOutbound(params: {
 }
 
 function resolveDirectSignalReplyAuthor(to: string): string | undefined {
-  if (inferSignalTargetChatType(to) !== "direct") {
+  const normalized = normalizeSignalMessagingTarget(to);
+  if (!normalized || inferSignalTargetChatType(normalized) !== "direct") {
     return undefined;
   }
-  const normalized = to
-    .replace(/^signal:/i, "")
-    .replace(/^uuid:/i, "")
-    .trim();
-  return normalized || undefined;
+  return normalized;
 }
 
 function resolveSignalReplyOptions(params: {

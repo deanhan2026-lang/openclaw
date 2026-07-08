@@ -235,6 +235,14 @@ function buildReconciledCommitContext(params: {
   result: OutboundDeliveryResult;
 }): ChannelMessageSendCommitContext {
   const payload = params.entry.payloads[0] ?? {};
+  const replyToId =
+    params.entry.effectiveReplyToId !== undefined
+      ? params.entry.effectiveReplyToId
+      : params.entry.replyToId;
+  const replyToAuthor =
+    replyToId !== undefined && replyToId === params.entry.replyToId
+      ? params.entry.replyToAuthor
+      : undefined;
   const result = {
     messageId: params.result.messageId,
     receipt: params.result.receipt ?? {
@@ -247,10 +255,8 @@ function buildReconciledCommitContext(params: {
     cfg: params.cfg,
     to: params.entry.to,
     accountId: params.entry.accountId,
-    replyToId:
-      params.entry.effectiveReplyToId !== undefined
-        ? params.entry.effectiveReplyToId
-        : params.entry.replyToId,
+    replyToId,
+    replyToAuthor,
     replyToMode: params.entry.replyToMode,
     threadId: params.entry.threadId,
     silent: params.entry.silent,

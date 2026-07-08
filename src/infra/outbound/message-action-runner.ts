@@ -955,12 +955,12 @@ async function buildSendPayloadParts(params: {
 
   message = stripPlainTextToolCallBlocks(stripUnsupportedCitationControlMarkers(parsed.text));
   actionParams.message = message;
-  if (!actionParams.replyTo && parsed.replyToId) {
-    actionParams.replyTo = parsed.replyToId;
-  }
   const replyToIdAlias = readStringParam(actionParams, "replyToId");
   if (!actionParams.replyTo && replyToIdAlias) {
     actionParams.replyTo = replyToIdAlias;
+  }
+  if (!actionParams.replyTo && parsed.replyToId) {
+    actionParams.replyTo = parsed.replyToId;
   }
   if (!actionParams.media) {
     actionParams.media = mergedMediaUrls[0] || undefined;

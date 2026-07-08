@@ -2355,10 +2355,15 @@ describe("deliverOutboundPayloads", () => {
       to: "!room",
       payloads: [{ text: "abcd" }],
       replyToId: "777",
+      replyToAuthor: "ambient-author",
       replyToMode: "first",
     });
 
     expect(sendText.mock.calls.map((call) => call[0]?.replyToId)).toEqual(["777", undefined]);
+    expect(sendText.mock.calls.map((call) => call[0]?.replyToAuthor)).toEqual([
+      "ambient-author",
+      undefined,
+    ]);
   });
 
   it("suppresses fallback replyToId when replyToMode is off but preserves explicit payload replies", async () => {
