@@ -47,8 +47,8 @@ A positive ClawSweeper result is supporting evidence, not maintainer approval.
 Maintainers still decide whether and when a PR is ready to merge.
 
 ClawSweeper is queue-based. Do not expect an immediate response after opening a
-PR, pushing a commit, or asking for review. Label updates after a ClawSweeper
-run can also take time.
+PR, pushing a commit, or adding a review request. Label updates after a
+ClawSweeper run can also take time.
 
 ClawSweeper is triggered when a PR is opened. If you have updated your branch,
 PR description, proof, or code, ask ClawSweeper for another review by adding a
