@@ -26,6 +26,11 @@ type CronSession = {
   [key: string]: unknown;
 };
 
+type SessionAccessorModule = typeof import("../../config/sessions/session-accessor.js");
+
+let actualReplaceSessionEntry: SessionAccessorModule["replaceSessionEntry"];
+let actualLoadSessionEntry: SessionAccessorModule["loadSessionEntry"];
+
 function createMock(): Mock {
   return vi.fn();
 }
@@ -39,6 +44,10 @@ function normalizeModelSelectionForTest(value: unknown): string | undefined {
     return undefined;
   }
   return normalizeOptionalString((value as { primary?: unknown }).primary);
+}
+
+function usesRealAccessorStore(storePath?: string): boolean {
+  return Boolean(storePath && storePath !== "/tmp/store.json");
 }
 
 export const buildWorkspaceSkillSnapshotMock = createMock();
@@ -320,13 +329,18 @@ vi.mock("../../gateway/call.runtime.js", () => ({
   callGateway: callGatewayMock,
 }));
 
-vi.mock("../../config/sessions/session-accessor.js", async () => ({
-  ...(await vi.importActual<typeof import("../../config/sessions/session-accessor.js")>(
+vi.mock("../../config/sessions/session-accessor.js", async () => {
+  const actual = await vi.importActual<SessionAccessorModule>(
     "../../config/sessions/session-accessor.js",
-  )),
-  replaceSessionEntry: replaceSessionEntryMock,
-  patchSessionEntry: patchSessionEntryMock,
-}));
+  );
+  actualReplaceSessionEntry = actual.replaceSessionEntry;
+  actualLoadSessionEntry = actual.loadSessionEntry;
+  return {
+    ...actual,
+    replaceSessionEntry: replaceSessionEntryMock,
+    patchSessionEntry: patchSessionEntryMock,
+  };
+});
 
 vi.mock("../delivery-plan.js", async () => ({
   ...(await vi.importActual<typeof import("../delivery-plan.js")>("../delivery-plan.js")),
@@ -699,7 +713,16 @@ function resetRunSessionMocks(): void {
   loadSessionEntryMock.mockReset();
   loadSessionEntryMock.mockReturnValue(undefined);
   replaceSessionEntryMock.mockReset();
-  replaceSessionEntryMock.mockResolvedValue(undefined);
+  replaceSessionEntryMock.mockImplementation(
+    async (
+      scope: Parameters<SessionAccessorModule["replaceSessionEntry"]>[0],
+      entry: Parameters<SessionAccessorModule["replaceSessionEntry"]>[1],
+    ) => {
+      if (usesRealAccessorStore(scope.storePath)) {
+        await actualReplaceSessionEntry(scope, entry);
+      }
+    },
+  );
   patchSessionEntryMock.mockReset();
   installPatchSessionEntryStore();
   resolveCronSessionMock.mockReset();
@@ -730,8 +753,12 @@ function installPatchSessionEntryStore(): void {
       ) => PatchRow | null,
       options: { fallbackEntry?: PatchRow } = {},
     ) => {
-      const key = `${scope.storePath ?? ""} ${scope.sessionKey}`;
-      const existingEntry = rows.get(key);
+      const key = `${scope.storePath ?? ""}\\0${scope.sessionKey}`;
+      const existingEntry =
+        rows.get(key) ??
+        (usesRealAccessorStore(scope.storePath)
+          ? actualLoadSessionEntry(scope as never)
+          : undefined);
       const writeBase = existingEntry ?? options.fallbackEntry;
       if (!writeBase) {
         return null;
@@ -744,6 +771,9 @@ function installPatchSessionEntryStore(): void {
       }
       const committed = structuredClone(next);
       rows.set(key, committed);
+      if (usesRealAccessorStore(scope.storePath)) {
+        await actualReplaceSessionEntry(scope as never, committed as never);
+      }
       return committed;
     },
   );

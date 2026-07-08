@@ -479,7 +479,7 @@ describe("agentCommand", () => {
       const sessionKey = "agent:main:discord:channel:voice-1";
       const staleStartedAt = Date.now() - 2 * 24 * 60 * 60_000;
       mockConfig(home, store);
-      writeSessionStoreSeed(store, {
+      await writeSessionStoreSeed(store, {
         [sessionKey]: {
           sessionId: "stale-voice-session",
           updatedAt: staleStartedAt,
@@ -527,7 +527,7 @@ describe("agentCommand", () => {
     await withTempHome(async (home) => {
       const store = path.join(home, "sessions.json");
       mockConfig(home, store);
-      writeSessionStoreSeed(store, {
+      await writeSessionStoreSeed(store, {
         "agent:main:subagent:archived": {
           sessionId: "archived-session-id",
           archivedAt: Date.now(),
@@ -558,11 +558,11 @@ describe("agentCommand", () => {
       const sessionKey = "agent:main:subagent:archive-race";
       const sessionId = "archive-race-session-id";
       mockConfig(home, store);
-      writeSessionStoreSeed(store, {
+      await writeSessionStoreSeed(store, {
         [sessionKey]: { sessionId, updatedAt: Date.now() },
       });
       vi.mocked(ensureAgentWorkspace).mockImplementationOnce(async (params) => {
-        writeSessionStoreSeed(store, {
+        await writeSessionStoreSeed(store, {
           [sessionKey]: {
             sessionId,
             archivedAt: Date.now(),
@@ -594,7 +594,7 @@ describe("agentCommand", () => {
       const sessionKey = "agent:main:subagent:restore-race";
       const sessionId = "restore-race-session-id";
       mockConfig(home, store);
-      writeSessionStoreSeed(store, {
+      await writeSessionStoreSeed(store, {
         [sessionKey]: {
           sessionId,
           archivedAt: Date.now(),
@@ -602,7 +602,7 @@ describe("agentCommand", () => {
         },
       });
       vi.mocked(ensureAgentWorkspace).mockImplementationOnce(async (params) => {
-        writeSessionStoreSeed(store, {
+        await writeSessionStoreSeed(store, {
           [sessionKey]: { sessionId, updatedAt: Date.now() },
         });
         return { dir: params?.dir ?? "/tmp/openclaw-workspace" };
@@ -630,7 +630,7 @@ describe("agentCommand", () => {
       const sessionKey = "agent:main:subagent:in-band-lifecycle";
       const sessionId = "in-band-lifecycle-session-id";
       mockConfig(home, store);
-      writeSessionStoreSeed(store, {
+      await writeSessionStoreSeed(store, {
         [sessionKey]: { sessionId, updatedAt: Date.now() },
       });
       vi.mocked(runEmbeddedAgent).mockImplementationOnce(async () => {
@@ -663,7 +663,7 @@ describe("agentCommand", () => {
       const sessionKey = "agent:main:subagent:lifecycle-restart";
       const sessionId = "lifecycle-restart-session-id";
       mockConfig(home, store);
-      writeSessionStoreSeed(store, {
+      await writeSessionStoreSeed(store, {
         [sessionKey]: { sessionId, updatedAt: Date.now() },
       });
       let observedAbortReason: unknown;
@@ -709,7 +709,7 @@ describe("agentCommand", () => {
       const store = path.join(home, "sessions.json");
       const sessionKey = "agent:main:subagent:stale-request";
       mockConfig(home, store);
-      writeSessionStoreSeed(store, {
+      await writeSessionStoreSeed(store, {
         [sessionKey]: { sessionId: "current-session-id", updatedAt: Date.now() },
       });
 
@@ -838,7 +838,7 @@ describe("agentCommand", () => {
       expect(vi.mocked(attemptExecutionRuntime.persistCliTurnTranscript)).toHaveBeenCalledTimes(1);
       const persistArgs = vi.mocked(attemptExecutionRuntime.persistCliTurnTranscript).mock
         .calls[0]?.[0];
-      expect(persistArgs?.embeddedAssistantGapFill).toBe(false);
+      expect(persistArgs?.embeddedAssistantGapFill).toBe(true);
       expect(persistArgs?.body).toBe("hello from user");
       expect(persistArgs?.result.meta?.executionTrace?.runner).toBe("embedded");
     });
@@ -909,7 +909,7 @@ describe("agentCommand", () => {
       expect(vi.mocked(attemptExecutionRuntime.persistCliTurnTranscript)).toHaveBeenCalledTimes(1);
       const persistArgs = vi.mocked(attemptExecutionRuntime.persistCliTurnTranscript).mock
         .calls[0]?.[0];
-      expect(persistArgs?.embeddedAssistantGapFill).toBe(false);
+      expect(persistArgs?.embeddedAssistantGapFill).toBe(true);
       expect(persistArgs?.body).toBe("call a tool then answer");
     });
   });

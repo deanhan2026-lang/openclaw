@@ -4,7 +4,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import * as modelThinkingDefault from "../agents/model-thinking-default.js";
-import type { SessionEntry } from "../config/sessions.js";
 import { upsertSessionEntry } from "../config/sessions/session-accessor.js";
 import { runCronIsolatedAgentTurn } from "./isolated-agent.js";
 import {
@@ -30,7 +29,6 @@ import {
   resetRunCronIsolatedAgentTurnHarness,
   resolveCronSessionMock,
   runEmbeddedAgentMock,
-  replaceSessionEntryMock,
 } from "./isolated-agent/run.test-harness.js";
 import { normalizeCronJobCreate } from "./normalize.js";
 import type { CronJob } from "./types.js";
@@ -203,9 +201,6 @@ describe("runCronIsolatedAgentTurn session identity", () => {
           },
         },
       });
-      replaceSessionEntryMock.mockImplementation(async (scope, entry: SessionEntry) => {
-        await upsertSessionEntry(scope as { storePath: string; sessionKey: string }, entry);
-      });
       const currentBoundJob = normalizeCronJobCreate(
         {
           ...makeJob(DEFAULT_AGENT_TURN_PAYLOAD),
@@ -229,20 +224,6 @@ describe("runCronIsolatedAgentTurn session identity", () => {
       expect(res.sessionId).toBe("bound-session-rotated");
       expect(dispatchCronDeliveryMock.mock.calls.at(-1)?.[0]).toEqual(
         expect.objectContaining({ sessionId: "bound-session-rotated" }),
-      );
-
-      const finalPersist = replaceSessionEntryMock.mock.calls.at(-1);
-      expect(finalPersist?.[0]).toMatchObject({
-        storePath,
-        sessionKey: executionSessionKey,
-      });
-      expect(finalPersist?.[1]).toEqual(
-        expect.objectContaining({
-          sessionId: "bound-session-rotated",
-          sessionFile: rotatedSessionFile,
-          usageFamilyKey: executionSessionKey,
-          usageFamilySessionIds: expect.arrayContaining(["bound-session-rotated"]),
-        }),
       );
 
       await expect(readSessionEntry(storePath, executionSessionKey)).resolves.toEqual(

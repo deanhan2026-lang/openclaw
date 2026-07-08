@@ -462,7 +462,7 @@ export async function patchSqliteSessionEntryTarget(
   ) => Promise<Partial<SessionEntry> | null> | Partial<SessionEntry> | null,
   options: SqliteSessionEntryPatchOptions = {},
 ): Promise<SessionEntry | null> {
-  const resolved = resolveSqliteStoreScope(scope.storePath);
+  const resolved = resolveSqliteStoreScope(scope.storePath, { agentId: scope.agentId });
   return await runExclusiveSqliteSessionWrite(resolved, async () => {
     const maintenancePlans: SqliteSessionEntryMaintenancePlan[] = [];
     const result = await runOpenClawAgentWriteTransactionAsync(async (writeDatabase) => {

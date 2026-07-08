@@ -526,6 +526,8 @@ export type SessionEntryPatchResult = {
 };
 
 export type SessionEntryTargetPatchScope = {
+  /** Agent owner used when resolving custom/shared legacy store paths. */
+  agentId?: string;
   storePath: string;
   /** Canonical key plus aliases that identify the logical entry. */
   target: SessionLifecycleStoreTarget;

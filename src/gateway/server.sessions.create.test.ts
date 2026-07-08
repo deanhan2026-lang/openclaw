@@ -1015,7 +1015,7 @@ test("sessions.create forks the parent transcript into the new session", async (
     (await loadTranscriptEvents(scope))
       .filter((entry): entry is { type: "message"; message: unknown } => {
         return (
-          !!entry &&
+          entry !== null &&
           typeof entry === "object" &&
           "type" in entry &&
           entry.type === "message" &&

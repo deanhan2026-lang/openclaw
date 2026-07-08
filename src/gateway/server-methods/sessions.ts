@@ -1704,24 +1704,27 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       entry.sessionId,
       entry.lifecycleRevision,
     ];
+    const restoreLockIdentities = [entry.sessionId, entry.lifecycleRevision];
     let admittedWorkReleased = true;
     let restoreTargetStillCurrent = true;
     // Restore replaces the active transcript identity. Hold the same lifecycle fence as
     // compaction so neither operation can publish state from the other's obsolete session.
     await runExclusiveSessionLifecycleMutation({
       scope: storePath,
-      identities: lifecycleIdentities,
+      identities: restoreLockIdentities,
       prepare: async () => {
         const current = loadAccessorSessionEntryForGatewayTarget({
           key,
           cfg,
           agentId: requestedAgent.agentId,
         });
-        restoreTargetStillCurrent = Boolean(
+        const currentCheckpoint = current.entry
+          ? getSessionCompactionCheckpoint({ entry: current.entry, checkpointId })
+          : undefined;
+        restoreTargetStillCurrent =
           current.entry?.sessionId === entry.sessionId &&
           current.entry.lifecycleRevision === entry.lifecycleRevision &&
-          getSessionCompactionCheckpoint({ entry: current.entry, checkpointId }),
-        );
+          currentCheckpoint !== undefined;
         if (!restoreTargetStillCurrent) {
           return;
         }
@@ -1771,7 +1774,11 @@ export const sessionsHandlers: GatewayRequestHandlers = {
           );
           return;
         }
-        if (!getSessionCompactionCheckpoint({ entry: current.entry, checkpointId })) {
+        const currentCheckpoint = getSessionCompactionCheckpoint({
+          entry: current.entry,
+          checkpointId,
+        });
+        if (!currentCheckpoint) {
           respond(
             false,
             undefined,
@@ -2763,7 +2770,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       const transcriptEvents = await loadTranscriptEvents({
         agentId: target.agentId,
         sessionId,
-        sessionKey: target.canonicalKey,
+        sessionKey: compactTarget.primaryKey,
         storePath,
       }).catch(() => []);
       if (transcriptEvents.length === 0) {
@@ -2797,12 +2804,16 @@ export const sessionsHandlers: GatewayRequestHandlers = {
         identities: lifecycleIdentities,
         kind: "compaction",
         prepare: async () => {
-          const latestEntry = loadSessionEntry(key, { agentId: requestedAgentId }).entry;
+          const latestEntry = loadAccessorSessionEntryForGatewayTarget({
+            key,
+            cfg,
+            agentId: requestedAgentId,
+          }).entry;
           sessionStillCurrent = Boolean(
             latestEntry &&
-            latestEntry.sessionId === sessionId &&
-            latestEntry.lifecycleRevision === lifecycleRevision &&
-            !resolveSessionWorkStartError(target.canonicalKey, latestEntry),
+              latestEntry.sessionId === sessionId &&
+              latestEntry.lifecycleRevision === lifecycleRevision &&
+              !resolveSessionWorkStartError(target.canonicalKey, latestEntry),
           );
           if (!sessionStillCurrent) {
             return;
@@ -2838,7 +2849,11 @@ export const sessionsHandlers: GatewayRequestHandlers = {
             return;
           }
 
-          const latestEntry = loadSessionEntry(key, { agentId: requestedAgentId }).entry;
+          const latestEntry = loadAccessorSessionEntryForGatewayTarget({
+            key,
+            cfg,
+            agentId: requestedAgentId,
+          }).entry;
           if (
             !latestEntry ||
             latestEntry.sessionId !== sessionId ||
@@ -2912,7 +2927,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
           const transcriptEvents = await loadTranscriptEvents({
             agentId: target.agentId,
             sessionId,
-            sessionKey: target.canonicalKey,
+            sessionKey: compactTarget.primaryKey,
             storePath,
           }).catch(() => []);
           if (transcriptEvents.length === 0) {
@@ -2931,7 +2946,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
           const compactionTranscriptTarget = await resolveSessionTranscriptRuntimeTarget({
             agentId: target.agentId,
             sessionId,
-            sessionKey: target.canonicalKey,
+            sessionKey: compactTarget.primaryKey,
             storePath,
           });
 

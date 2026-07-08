@@ -12,6 +12,7 @@ import {
   loadSessionEntry as loadAccessorSessionEntry,
   loadTranscriptEvents,
   patchSessionEntry as patchAccessorSessionEntry,
+  replaceSessionEntry,
   upsertSessionEntry,
 } from "../config/sessions/session-accessor.js";
 import {
@@ -114,7 +115,7 @@ function expectMainCompactionResult(
   compacted: { ok?: boolean; payload?: { compacted?: boolean; key?: string } | null },
   expectedCompacted: boolean,
 ) {
-  expect(compacted.ok).toBe(true);
+  expect(compacted.ok, JSON.stringify(compacted)).toBe(true);
   expect(compacted.payload?.key).toBe("agent:main:main");
   expect(compacted.payload?.compacted).toBe(expectedCompacted);
 }
@@ -219,6 +220,12 @@ test("sessions.compaction.* lists checkpoints and branches or restores from comp
     }),
     sessionKey: "agent:main:main",
     storePath,
+  });
+  await seedTranscriptRows({
+    sessionId: fixture.sessionId,
+    sessionKey: "agent:main:main",
+    storePath,
+    totalLines: 2,
   });
   fixture.session.appendMessage({
     role: "user",
@@ -1097,6 +1104,12 @@ test("sessions.compaction.restore waits for terminal compaction before replacing
     sessionKey: "agent:main:main",
     storePath,
   });
+  await seedTranscriptRows({
+    sessionId: fixture.sessionId,
+    sessionKey: "agent:main:main",
+    storePath,
+    totalLines: 2,
+  });
   const compaction = createDeferred<{
     ok: true;
     compacted: true;
@@ -1192,22 +1205,18 @@ test("sessions.compaction.restore leaves replacement-session work untouched when
   await new Promise<void>((resolve) => {
     setImmediate(resolve);
   });
-  await seedSessionEntry({
-    entry: sessionStoreEntry(replacementSessionId),
-    sessionKey: "agent:main:main",
-    storePath,
-  });
+  await replaceSessionEntry(
+    { sessionKey: "agent:main:main", storePath },
+    sessionStoreEntry(replacementSessionId),
+  );
 
   try {
     releaseBlocker.resolve();
     await blocker;
-    await expect(restore).resolves.toMatchObject({
-      ok: false,
-      error: {
-        code: "INVALID_REQUEST",
-        details: { reason: "session-changed" },
-      },
-    });
+    const response = await restore;
+    expect(response.ok).toBe(false);
+    expect(response.error?.code).toBe("INVALID_REQUEST");
+    expect(response.error?.message).toMatch(/checkpoint not found|changed before checkpoint restore/);
     expect(replacementInterrupted).toBe(false);
   } finally {
     releaseBlocker.resolve();

@@ -1550,13 +1550,15 @@ export function resolveGatewaySessionStoreTargetWithStore(params: {
     return explicitDeletedMainTarget;
   }
 
+  const requestedAgentId = normalizeOptionalString(params.agentId);
   const canonicalKey = resolveSessionStoreKey({
     cfg: params.cfg,
     sessionKey: key,
+    ...(requestedAgentId ? { storeAgentId: requestedAgentId } : {}),
   });
-  const requestedAgentId = normalizeOptionalString(params.agentId);
   const agentId =
-    isAgentScopedSentinelSessionKey(canonicalKey) && requestedAgentId
+    requestedAgentId &&
+    (isAgentScopedSentinelSessionKey(canonicalKey) || !parseAgentSessionKey(key))
       ? normalizeAgentId(requestedAgentId)
       : resolveSessionStoreAgentId(params.cfg, canonicalKey);
   const { storePath, store } = resolveGatewaySessionStoreLookup({

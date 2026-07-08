@@ -1887,9 +1887,10 @@ export const agentHandlers: GatewayRequestHandlers = {
       let postAdmissionSuperseded = false;
       let lifecycleRotatedDuringAdmission = false;
       const admissionAgentId = () =>
-        resolvedSessionKey === "global"
-          ? (resolvedSessionAgentId ?? agentId ?? resolveDefaultAgentId(cfgForAgent ?? cfg))
-          : undefined;
+        resolvedSessionAgentId ??
+        (resolvedSessionKey === "global"
+          ? (agentId ?? resolveDefaultAgentId(cfgForAgent ?? cfg))
+          : undefined);
       const assertGatewayWorkAdmissionAllowed = () => {
         const latestPreRegistrationAbort = readGatewayDedupeEntry({
           dedupe: context.dedupe,
@@ -1968,15 +1969,19 @@ export const agentHandlers: GatewayRequestHandlers = {
         if (lifecycleRotatedDuringAdmission || !resolvedSessionKey) {
           return;
         }
+        const admissionAgent = admissionAgentId();
         let latestEntry = loadSessionEntry(resolvedSessionKey, {
-          ...(resolvedSessionKey === "global" ? { agentId: admissionAgentId() } : {}),
+          agentId: admissionAgent,
           clone: false,
         }).entry;
         // Legacy stores may only carry the requested spelling (e.g. bare
         // "main"); a canonical-only re-read would misreport those sessions
         // as deleted mid-start.
         if (!latestEntry && requestedSessionKey && requestedSessionKey !== resolvedSessionKey) {
-          latestEntry = loadSessionEntry(requestedSessionKey, { clone: false }).entry;
+          latestEntry = loadSessionEntry(requestedSessionKey, {
+            agentId: admissionAgent,
+            clone: false,
+          }).entry;
         }
         if (sessionPersistedBeforeGatewayAdmission && !latestEntry) {
           throw new Error(
@@ -2646,6 +2651,7 @@ export const agentHandlers: GatewayRequestHandlers = {
             persisted =
               (await patchSessionEntryTarget(
                 {
+                  agentId: sessionAgentId,
                   storePath,
                   target: {
                     canonicalKey: canonicalSessionKey,
@@ -2660,11 +2666,11 @@ export const agentHandlers: GatewayRequestHandlers = {
                   // A completed delete must win over this request's earlier read;
                   // otherwise the initial touch would recreate the removed row.
                   // The accessor target already spans the requested key plus its
-                  // known aliases, so a miss here means the row is truly gone.
-                  if (entry && !freshEntry) {
-                    deletedDuringStoreUpdateError = `Session "${canonicalSessionKey}" was deleted while starting work. Retry.`;
-                    throw new Error(deletedDuringStoreUpdateError);
-                  }
+	                  // known aliases, so a miss here means the row is truly gone.
+	                  if (entry && !freshEntry) {
+	                    deletedDuringStoreUpdateError = `Session "${canonicalSessionKey}" was deleted while starting work. Retry.`;
+	                    throw new Error(deletedDuringStoreUpdateError);
+	                  }
                   const archivedError = resolveSessionWorkStartError(
                     canonicalSessionKey,
                     freshEntry,
@@ -3060,7 +3066,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       });
       const lifecycleStorePath = resolvedSessionKey
         ? loadSessionEntry(resolvedSessionKey, {
-            ...(resolvedSessionKey === "global" ? { agentId: activeSessionAgentId } : {}),
+            ...(activeSessionAgentId ? { agentId: activeSessionAgentId } : {}),
             clone: false,
           }).storePath
         : `agent:${activeSessionAgentId}`;
@@ -3295,13 +3301,11 @@ export const agentHandlers: GatewayRequestHandlers = {
                     idempotencyKey: `${runId}:user`,
                     ...(inputProvenance ? { provenance: inputProvenance } : {}),
                   },
-                  target: () => {
-                    const loaded = loadSessionEntry(resolvedSessionKey, {
-                      ...(resolvedSessionKey === "global" && activeSessionAgentId
-                        ? { agentId: activeSessionAgentId }
-                        : {}),
-                      clone: false,
-                    });
+	                  target: () => {
+	                    const loaded = loadSessionEntry(resolvedSessionKey, {
+	                      ...(activeSessionAgentId ? { agentId: activeSessionAgentId } : {}),
+	                      clone: false,
+	                    });
                     const loadedEntry = loaded.entry;
                     const loadedSessionId = loadedEntry?.sessionId?.trim();
                     if (loadedSessionId && loadedSessionId !== resolvedSessionId) {

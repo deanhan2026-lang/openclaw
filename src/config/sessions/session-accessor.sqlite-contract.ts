@@ -136,6 +136,7 @@ export type SessionEntryPatchContext = {
 };
 
 export type SessionEntryTargetPatchScope = {
+  agentId?: string;
   storePath: string;
   target: SessionLifecycleStoreTarget;
 };

@@ -83,7 +83,7 @@ async function runMainAgentDeliveryWithSession(params: {
       deliver: true,
       ...params.request,
     });
-    expect(res.ok).toBe(true);
+    expect(res.ok, JSON.stringify(res)).toBe(true);
     return await waitForAgentCommandCall(String(params.request.idempotencyKey));
   } finally {
     testState.allowFrom = undefined;
@@ -123,6 +123,7 @@ async function runAgentImageRequest(params: {
 
   const res = await rpcReq(gatewaySuite.ws, "agent", {
     message: "what is in the image?",
+    ...(params.agentId ? { agentId: params.agentId } : {}),
     sessionKey: params.sessionKey ?? "main",
     attachments: [baseImageAttachment()],
     idempotencyKey: params.idempotencyKey,
@@ -234,7 +235,7 @@ describe("gateway server agent", () => {
       deliver: true,
       idempotencyKey: "idem-agent-last-stale",
     });
-    expect(res.ok).toBe(true);
+    expect(res.ok, JSON.stringify(res)).toBe(true);
 
     const call = await waitForAgentCommandCall("idem-agent-last-stale");
     expectChannels(call, "whatsapp");
@@ -310,6 +311,7 @@ describe("gateway server agent", () => {
   });
 
   test("agent derives sessionKey from agentId", async () => {
+    testState.agentsConfig = { list: [{ id: "ops" }] };
     await setTestSessionStore({
       agentId: "ops",
       entries: {
@@ -319,13 +321,12 @@ describe("gateway server agent", () => {
         },
       },
     });
-    testState.agentsConfig = { list: [{ id: "ops" }] };
     const res = await rpcReq(gatewaySuite.ws, "agent", {
       message: "hi",
       agentId: "ops",
       idempotencyKey: "idem-agent-id",
     });
-    expect(res.ok).toBe(true);
+    expect(res.ok, JSON.stringify(res)).toBe(true);
 
     const call = await waitForAgentCommandCall("idem-agent-id");
     expect(call.sessionKey).toBe("agent:ops:main");
