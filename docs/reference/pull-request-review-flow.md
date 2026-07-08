@@ -51,8 +51,8 @@ PR, pushing a commit, or asking for review. Label updates after a ClawSweeper
 run can also take time.
 
 ClawSweeper is triggered when a PR is opened. If you have updated your branch,
-PR description, proof, or code, ask ClawSweeper for another review by commenting
-on the PR:
+PR description, proof, or code, ask ClawSweeper for another review by adding a
+new PR comment:
 
 ```text
 @clawsweeper re-review
