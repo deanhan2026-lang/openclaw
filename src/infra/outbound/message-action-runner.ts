@@ -955,11 +955,6 @@ async function buildSendPayloadParts(params: {
 
   message = stripPlainTextToolCallBlocks(stripUnsupportedCitationControlMarkers(parsed.text));
   actionParams.message = message;
-  const replyToIdAlias =
-    params.channel === "signal" ? readStringParam(actionParams, "replyToId") : undefined;
-  if (!actionParams.replyTo && replyToIdAlias) {
-    actionParams.replyTo = replyToIdAlias;
-  }
   if (!actionParams.replyTo && parsed.replyToId) {
     actionParams.replyTo = parsed.replyToId;
   }

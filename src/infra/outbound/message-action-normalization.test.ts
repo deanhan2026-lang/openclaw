@@ -242,4 +242,56 @@ describe("normalizeMessageActionInput", () => {
       }),
     ).toThrow(/conflicting target and delivery alias/);
   });
+
+  it("accepts replyToId as a Signal-only alias for explicit reply targets", () => {
+    const normalized = normalizeMessageActionInput({
+      action: "send",
+      args: {
+        channel: "signal",
+        target: "+15551234567",
+        message: "threaded",
+        replyToId: "child-1",
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      replyToId: "child-1",
+      replyTo: "child-1",
+    });
+  });
+
+  it("lets explicit Signal replyTo beat replyToId aliases", () => {
+    const normalized = normalizeMessageActionInput({
+      action: "send",
+      args: {
+        channel: "signal",
+        target: "+15551234567",
+        message: "threaded",
+        replyTo: "explicit-1",
+        replyToId: "alias-1",
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      replyTo: "explicit-1",
+      replyToId: "alias-1",
+    });
+  });
+
+  it("does not accept replyToId as a reply target alias for other channels", () => {
+    const normalized = normalizeMessageActionInput({
+      action: "send",
+      args: {
+        channel: "slack",
+        target: "channel:C1",
+        message: "threaded",
+        replyToId: "child-1",
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      replyToId: "child-1",
+    });
+    expect("replyTo" in normalized).toBe(false);
+  });
 });

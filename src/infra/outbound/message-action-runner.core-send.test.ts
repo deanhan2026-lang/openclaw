@@ -37,14 +37,6 @@ const slackConfig = {
   },
 } as OpenClawConfig;
 
-const signalConfig = {
-  channels: {
-    signal: {
-      enabled: true,
-    },
-  },
-} as OpenClawConfig;
-
 function registerSlackTextPlugin() {
   const sendText = vi.fn().mockResolvedValue({
     channel: "slack",
@@ -59,37 +51,6 @@ function registerSlackTextPlugin() {
         plugin: {
           ...createOutboundTestPlugin({
             id: "slack",
-            outbound: {
-              deliveryMode: "direct",
-              sendText,
-            },
-          }),
-          config: {
-            listAccountIds: () => ["default"],
-            resolveAccount: () => ({ enabled: true }),
-            isConfigured: () => true,
-          },
-        },
-      },
-    ]),
-  );
-  return sendText;
-}
-
-function registerSignalTextPlugin() {
-  const sendText = vi.fn().mockResolvedValue({
-    channel: "signal",
-    messageId: "m1",
-    chatId: "+15551234567",
-  });
-  setActivePluginRegistry(
-    createTestRegistry([
-      {
-        pluginId: "signal",
-        source: "test",
-        plugin: {
-          ...createOutboundTestPlugin({
-            id: "signal",
             outbound: {
               deliveryMode: "direct",
               sendText,
@@ -356,46 +317,6 @@ describe("runMessageAction core send routing", () => {
     expect(firstMockArg(sendText, "send text")).toMatchObject({
       replyToId: "child-1",
       threadId: "root-1",
-    });
-  });
-
-  it("accepts replyToId as a Signal-only alias for explicit reply targets", async () => {
-    const sendText = registerSignalTextPlugin();
-
-    await runMessageAction({
-      cfg: signalConfig,
-      action: "send",
-      params: {
-        channel: "signal",
-        target: "+15551234567",
-        message: "threaded",
-        replyToId: "child-1",
-      },
-      dryRun: false,
-    });
-
-    expect(firstMockArg(sendText, "send text")).toMatchObject({
-      replyToId: "child-1",
-    });
-  });
-
-  it("lets Signal replyToId beat inline reply directives", async () => {
-    const sendText = registerSignalTextPlugin();
-
-    await runMessageAction({
-      cfg: signalConfig,
-      action: "send",
-      params: {
-        channel: "signal",
-        target: "+15551234567",
-        message: "[[reply_to:inline-1]] threaded",
-        replyToId: "child-1",
-      },
-      dryRun: false,
-    });
-
-    expect(firstMockArg(sendText, "send text")).toMatchObject({
-      replyToId: "child-1",
     });
   });
 
