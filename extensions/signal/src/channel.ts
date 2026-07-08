@@ -129,6 +129,9 @@ function resolveDirectSignalReplyAuthor(to: string): string | undefined {
   if (!normalized || inferSignalTargetChatType(normalized) !== "direct") {
     return undefined;
   }
+  if (normalized.startsWith("username:")) {
+    return `u:${normalized.slice("username:".length)}`;
+  }
   return normalized;
 }
 

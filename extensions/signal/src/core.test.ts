@@ -948,7 +948,7 @@ describe("signal outbound", () => {
       expect.objectContaining({
         cfg: {},
         replyToId: "1700000000001",
-        replyToAuthor: "username:alice",
+        replyToAuthor: "u:alice",
       }),
     );
   });
