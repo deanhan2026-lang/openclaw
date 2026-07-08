@@ -201,7 +201,6 @@ type ChannelHandlerParams = {
   to: string;
   accountId?: string;
   replyToId?: string | null;
-  replyToAuthor?: string | null;
   replyToMode?: ReplyToMode;
   formatting?: OutboundDeliveryFormattingOptions;
   threadId?: string | number | null;
@@ -400,7 +399,6 @@ function createPluginHandler(
     : undefined;
   const resolveCtx = (overrides?: {
     replyToId?: string | null;
-    replyToAuthor?: string | null;
     replyToIdSource?: "explicit" | "implicit";
     threadId?: string | number | null;
     audioAsVoice?: boolean;
@@ -408,8 +406,6 @@ function createPluginHandler(
   }): Omit<ChannelOutboundContext, "text" | "mediaUrl"> => ({
     ...baseCtx,
     replyToId: overrides && "replyToId" in overrides ? overrides.replyToId : baseCtx.replyToId,
-    replyToAuthor:
-      overrides && "replyToAuthor" in overrides ? overrides.replyToAuthor : baseCtx.replyToAuthor,
     replyToIdSource:
       overrides && "replyToIdSource" in overrides
         ? overrides.replyToIdSource
@@ -421,8 +417,6 @@ function createPluginHandler(
         ? { ...baseCtx.formatting, ...overrides.formatting }
         : baseCtx.formatting,
   });
-  const resolvePairedReplyToAuthor = (replyToId?: string | null): string | undefined =>
-    replyToId && replyToId === params.replyToId ? (params.replyToAuthor ?? undefined) : undefined;
   const buildTargetRef = (overrides?: {
     threadId?: string | number | null;
   }): ChannelOutboundTargetRef => ({
@@ -456,11 +450,9 @@ function createPluginHandler(
           if (!presentation) {
             return payload;
           }
-          const replyToId = payload.replyToId ?? baseCtx.replyToId;
           const ctx: ChannelOutboundPayloadContext = {
             ...resolveCtx({
-              replyToId,
-              replyToAuthor: resolvePairedReplyToAuthor(replyToId),
+              replyToId: payload.replyToId ?? baseCtx.replyToId,
               threadId: baseCtx.threadId,
               audioAsVoice: payload.audioAsVoice,
             }),
@@ -641,7 +633,6 @@ function createChannelOutboundContextBase(
     to: params.to,
     accountId: params.accountId,
     replyToId: params.replyToId,
-    replyToAuthor: params.replyToAuthor,
     replyToMode: params.replyToMode,
     formatting: params.formatting,
     threadId: params.threadId,
@@ -729,7 +720,6 @@ type DeliverOutboundPayloadsCoreParams = {
   accountId?: string;
   payloads: ReplyPayload[];
   replyToId?: string | null;
-  replyToAuthor?: string | null;
   replyToMode?: ReplyToMode;
   formatting?: OutboundDeliveryFormattingOptions;
   threadId?: string | number | null;
@@ -1373,7 +1363,6 @@ export async function deliverOutboundPayloadsInternal(
         renderedBatchPlan: queueRenderedBatchPlan,
         threadId: params.threadId,
         replyToId: params.replyToId,
-        replyToAuthor: params.replyToAuthor,
         replyToMode: params.replyToMode,
         formatting: params.formatting,
         identity: params.identity,
@@ -1843,7 +1832,6 @@ async function deliverOutboundPayloadsCore(
       deps,
       accountId,
       replyToId: params.replyToId,
-      replyToAuthor: params.replyToAuthor,
       replyToMode: params.replyToMode,
       formatting: params.formatting,
       threadId: params.threadId,
@@ -2104,13 +2092,8 @@ async function deliverOutboundPayloadsCore(
 
       params.onPayload?.(payloadSummary);
       const replyToResolution = resolveCurrentReplyTo(effectivePayload);
-      const replyToAuthor =
-        replyToResolution.replyToId && replyToResolution.replyToId === params.replyToId
-          ? params.replyToAuthor
-          : undefined;
       const sendOverrides: OutboundMessageSendOverrides = {
         replyToId: replyToResolution.replyToId,
-        replyToAuthor,
         replyToIdSource: replyToResolution.source,
         ...(params.threadId !== undefined ? { threadId: params.threadId } : {}),
         ...(effectivePayload.audioAsVoice === true ? { audioAsVoice: true } : {}),

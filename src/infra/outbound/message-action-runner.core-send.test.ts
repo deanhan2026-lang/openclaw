@@ -37,6 +37,14 @@ const slackConfig = {
   },
 } as OpenClawConfig;
 
+const signalConfig = {
+  channels: {
+    signal: {
+      enabled: true,
+    },
+  },
+} as OpenClawConfig;
+
 function registerSlackTextPlugin() {
   const sendText = vi.fn().mockResolvedValue({
     channel: "slack",
@@ -51,6 +59,37 @@ function registerSlackTextPlugin() {
         plugin: {
           ...createOutboundTestPlugin({
             id: "slack",
+            outbound: {
+              deliveryMode: "direct",
+              sendText,
+            },
+          }),
+          config: {
+            listAccountIds: () => ["default"],
+            resolveAccount: () => ({ enabled: true }),
+            isConfigured: () => true,
+          },
+        },
+      },
+    ]),
+  );
+  return sendText;
+}
+
+function registerSignalTextPlugin() {
+  const sendText = vi.fn().mockResolvedValue({
+    channel: "signal",
+    messageId: "m1",
+    chatId: "+15551234567",
+  });
+  setActivePluginRegistry(
+    createTestRegistry([
+      {
+        pluginId: "signal",
+        source: "test",
+        plugin: {
+          ...createOutboundTestPlugin({
+            id: "signal",
             outbound: {
               deliveryMode: "direct",
               sendText,
@@ -320,15 +359,15 @@ describe("runMessageAction core send routing", () => {
     });
   });
 
-  it("accepts replyToId as an alias for explicit reply targets", async () => {
-    const sendText = registerSlackTextPlugin();
+  it("accepts replyToId as a Signal-only alias for explicit reply targets", async () => {
+    const sendText = registerSignalTextPlugin();
 
     await runMessageAction({
-      cfg: slackConfig,
+      cfg: signalConfig,
       action: "send",
       params: {
-        channel: "slack",
-        target: "channel:C1",
+        channel: "signal",
+        target: "+15551234567",
         message: "threaded",
         replyToId: "child-1",
       },
@@ -340,15 +379,15 @@ describe("runMessageAction core send routing", () => {
     });
   });
 
-  it("lets explicit replyToId beat inline reply directives", async () => {
-    const sendText = registerSlackTextPlugin();
+  it("lets Signal replyToId beat inline reply directives", async () => {
+    const sendText = registerSignalTextPlugin();
 
     await runMessageAction({
-      cfg: slackConfig,
+      cfg: signalConfig,
       action: "send",
       params: {
-        channel: "slack",
-        target: "channel:C1",
+        channel: "signal",
+        target: "+15551234567",
         message: "[[reply_to:inline-1]] threaded",
         replyToId: "child-1",
       },

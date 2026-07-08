@@ -42,6 +42,7 @@ import { signalMessageActions } from "./message-actions.js";
 import { looksLikeSignalTargetId, normalizeSignalMessagingTarget } from "./normalize.js";
 import { resolveSignalOutboundTarget } from "./outbound-session.js";
 import { resolveSignalReactionLevel } from "./reaction-level.js";
+import { resolveSignalReplyAuthorWithPersistence } from "./reply-authors.js";
 import { signalSetupAdapter } from "./setup-core.js";
 import {
   createSignalPluginBase,
@@ -104,10 +105,14 @@ async function sendSignalOutbound(params: {
   accountId?: string;
   deps?: { [channelId: string]: unknown };
   replyToId?: string | null;
-  replyToAuthor?: string | null;
 }) {
   const { send, maxBytes } = await resolveSignalSendContext(params);
   const to = resolveSignalSendTarget(params);
+  const replyOptions = await resolveSignalReplyOptions({
+    to,
+    accountId: params.accountId,
+    replyToId: params.replyToId,
+  });
   return await send(to, params.text, {
     cfg: params.cfg,
     ...(params.mediaUrl ? { mediaUrl: params.mediaUrl } : {}),
@@ -115,11 +120,7 @@ async function sendSignalOutbound(params: {
     ...(params.mediaReadFile ? { mediaReadFile: params.mediaReadFile } : {}),
     maxBytes,
     accountId: params.accountId ?? undefined,
-    ...resolveSignalReplyOptions({
-      to,
-      replyToId: params.replyToId,
-      replyToAuthor: params.replyToAuthor,
-    }),
+    ...replyOptions,
   });
 }
 
@@ -133,18 +134,46 @@ function resolveDirectSignalReplyAuthor(to: string): string | undefined {
 
 function resolveSignalReplyOptions(params: {
   to: string;
+  accountId?: string | null;
   replyToId?: string | null;
-  replyToAuthor?: string | null;
-}) {
+}): Promise<{ replyToId: string; replyToAuthor?: string } | Record<string, never>> {
   const replyToId = normalizeOptionalString(params.replyToId);
   if (!replyToId) {
-    return {};
+    return Promise.resolve({});
   }
-  return {
+  const directAuthor = resolveDirectSignalReplyAuthor(params.to);
+  if (directAuthor) {
+    return Promise.resolve({ replyToId, replyToAuthor: directAuthor });
+  }
+  return resolveSignalReplyAuthorWithPersistence({
+    accountId: params.accountId,
+    to: params.to,
     replyToId,
-    replyToAuthor:
-      normalizeOptionalString(params.replyToAuthor) ?? resolveDirectSignalReplyAuthor(params.to),
-  };
+  }).then((replyToAuthor) => ({
+    replyToId,
+    ...(replyToAuthor ? { replyToAuthor } : {}),
+  }));
+}
+
+function inferSignalTargetChatType(rawTo: string) {
+  let to = rawTo.trim();
+  if (!to) {
+    return undefined;
+  }
+  if (/^signal:/i.test(to)) {
+    to = to.replace(/^signal:/i, "").trim();
+  }
+  if (!to) {
+    return undefined;
+  }
+  const lower = normalizeLowercaseStringOrEmpty(to);
+  if (lower.startsWith("group:")) {
+    return "group" as const;
+  }
+  if (lower.startsWith("username:") || lower.startsWith("u:")) {
+    return "direct" as const;
+  }
+  return "direct" as const;
 }
 
 type SignalMessageContextExtras = {
@@ -183,7 +212,6 @@ const signalMessageAdapter = defineChannelMessageAdapter({
         accountId: ctx.accountId ?? undefined,
         deps: (ctx as typeof ctx & SignalMessageContextExtras).deps,
         replyToId: ctx.replyToId ?? undefined,
-        replyToAuthor: ctx.replyToAuthor ?? undefined,
       }),
     media: async (ctx) =>
       await sendSignalOutbound({
@@ -196,31 +224,9 @@ const signalMessageAdapter = defineChannelMessageAdapter({
         accountId: ctx.accountId ?? undefined,
         deps: (ctx as typeof ctx & SignalMessageContextExtras).deps,
         replyToId: ctx.replyToId ?? undefined,
-        replyToAuthor: ctx.replyToAuthor ?? undefined,
       }),
   },
 });
-
-function inferSignalTargetChatType(rawTo: string) {
-  let to = rawTo.trim();
-  if (!to) {
-    return undefined;
-  }
-  if (/^signal:/i.test(to)) {
-    to = to.replace(/^signal:/i, "").trim();
-  }
-  if (!to) {
-    return undefined;
-  }
-  const lower = normalizeLowercaseStringOrEmpty(to);
-  if (lower.startsWith("group:")) {
-    return "group" as const;
-  }
-  if (lower.startsWith("username:") || lower.startsWith("u:")) {
-    return "direct" as const;
-  }
-  return "direct" as const;
-}
 
 function buildSignalBaseSessionKey(params: {
   cfg: Parameters<typeof resolveSignalAccount>[0]["cfg"];
@@ -267,7 +273,6 @@ async function sendFormattedSignalText(ctx: {
   accountId?: string | null;
   deps?: { [channelId: string]: unknown };
   replyToId?: string | null;
-  replyToAuthor?: string | null;
   replyToIdSource?: Parameters<
     NonNullable<ChannelOutboundAdapter["sendFormattedText"]>
   >[0]["replyToIdSource"];
@@ -313,17 +318,18 @@ async function sendFormattedSignalText(ctx: {
   for (const chunk of chunks) {
     ctx.abortSignal?.throwIfAborted();
     const replyToId = nextReplyToId();
+    const replyOptions = await resolveSignalReplyOptions({
+      to,
+      accountId: ctx.accountId,
+      replyToId,
+    });
     const result = await send(to, chunk.text, {
       cfg: ctx.cfg,
       maxBytes,
       accountId: ctx.accountId ?? undefined,
       textMode: "plain",
       textStyles: chunk.styles,
-      ...resolveSignalReplyOptions({
-        to,
-        replyToId,
-        replyToAuthor: ctx.replyToAuthor,
-      }),
+      ...replyOptions,
     });
     const deliveryResult = attachChannelToResult(
       "signal",
@@ -345,7 +351,6 @@ async function sendFormattedSignalMedia(ctx: {
   accountId?: string | null;
   deps?: { [channelId: string]: unknown };
   replyToId?: string | null;
-  replyToAuthor?: string | null;
   abortSignal?: AbortSignal;
 }) {
   ctx.abortSignal?.throwIfAborted();
@@ -370,6 +375,11 @@ async function sendFormattedSignalMedia(ctx: {
     text: ctx.text,
     styles: [],
   };
+  const replyOptions = await resolveSignalReplyOptions({
+    to,
+    accountId: ctx.accountId,
+    replyToId: ctx.replyToId,
+  });
   const result = await send(to, formatted.text, {
     cfg: ctx.cfg,
     mediaUrl: ctx.mediaUrl,
@@ -379,11 +389,7 @@ async function sendFormattedSignalMedia(ctx: {
     accountId: ctx.accountId ?? undefined,
     textMode: "plain",
     textStyles: formatted.styles,
-    ...resolveSignalReplyOptions({
-      to,
-      replyToId: ctx.replyToId,
-      replyToAuthor: ctx.replyToAuthor,
-    }),
+    ...replyOptions,
   });
   return attachChannelToResult("signal", attachSignalVisibleText(result, formatted.text));
 }
@@ -647,7 +653,6 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount, SignalProbe> =
           accountId,
           deps,
           replyToId,
-          replyToAuthor,
           replyToIdSource,
           replyToMode,
           abortSignal,
@@ -660,7 +665,6 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount, SignalProbe> =
             accountId,
             deps,
             replyToId,
-            replyToAuthor,
             replyToIdSource,
             replyToMode,
             abortSignal,
@@ -676,7 +680,6 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount, SignalProbe> =
           accountId,
           deps,
           replyToId,
-          replyToAuthor,
           abortSignal,
         }) =>
           await sendFormattedSignalMedia({
@@ -689,13 +692,12 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount, SignalProbe> =
             accountId,
             deps,
             replyToId,
-            replyToAuthor,
             abortSignal,
           }),
       },
       attachedResults: {
         channel: "signal",
-        sendText: async ({ cfg, to, text, accountId, deps, replyToId, replyToAuthor }) =>
+        sendText: async ({ cfg, to, text, accountId, deps, replyToId }) =>
           await sendSignalOutbound({
             cfg,
             to,
@@ -703,7 +705,6 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount, SignalProbe> =
             accountId: accountId ?? undefined,
             deps,
             replyToId,
-            replyToAuthor,
           }),
         sendMedia: async ({
           cfg,
@@ -715,7 +716,6 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount, SignalProbe> =
           accountId,
           deps,
           replyToId,
-          replyToAuthor,
         }) =>
           await sendSignalOutbound({
             cfg,
@@ -727,7 +727,6 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount, SignalProbe> =
             accountId: accountId ?? undefined,
             deps,
             replyToId,
-            replyToAuthor,
           }),
       },
     },

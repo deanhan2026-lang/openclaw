@@ -31,7 +31,6 @@ export type ChannelOutboundContext = {
   /** Send image, GIF, or video as document to avoid channel compression. */
   forceDocument?: boolean;
   replyToId?: string | null;
-  replyToAuthor?: string | null;
   replyToIdSource?: "explicit" | "implicit";
   replyToMode?: ReplyToMode;
   formatting?: OutboundDeliveryFormattingOptions;

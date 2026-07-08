@@ -147,7 +147,6 @@ function buildRecoveryDeliverParams(entry: QueuedDelivery, cfg: OpenClawConfig, 
     renderedBatchPlan: entry.renderedBatchPlan,
     threadId: entry.threadId,
     replyToId: entry.replyToId,
-    replyToAuthor: entry.replyToAuthor,
     replyToMode: entry.replyToMode,
     formatting: entry.formatting,
     identity: entry.identity,
@@ -202,7 +201,6 @@ async function reconcileUnknownQueuedDelivery(opts: {
       payloads: entry.payloads,
       ...(entry.renderedBatchPlan ? { renderedBatchPlan: entry.renderedBatchPlan } : {}),
       ...(entry.replyToId !== undefined ? { replyToId: entry.replyToId } : {}),
-      ...(entry.replyToAuthor !== undefined ? { replyToAuthor: entry.replyToAuthor } : {}),
       ...(entry.replyToMode !== undefined ? { replyToMode: entry.replyToMode } : {}),
       ...(entry.threadId !== undefined ? { threadId: entry.threadId } : {}),
       ...(entry.silent !== undefined ? { silent: entry.silent } : {}),
@@ -235,14 +233,6 @@ function buildReconciledCommitContext(params: {
   result: OutboundDeliveryResult;
 }): ChannelMessageSendCommitContext {
   const payload = params.entry.payloads[0] ?? {};
-  const replyToId =
-    params.entry.effectiveReplyToId !== undefined
-      ? params.entry.effectiveReplyToId
-      : params.entry.replyToId;
-  const replyToAuthor =
-    replyToId !== undefined && replyToId === params.entry.replyToId
-      ? params.entry.replyToAuthor
-      : undefined;
   const result = {
     messageId: params.result.messageId,
     receipt: params.result.receipt ?? {
@@ -255,8 +245,10 @@ function buildReconciledCommitContext(params: {
     cfg: params.cfg,
     to: params.entry.to,
     accountId: params.entry.accountId,
-    replyToId,
-    replyToAuthor,
+    replyToId:
+      params.entry.effectiveReplyToId !== undefined
+        ? params.entry.effectiveReplyToId
+        : params.entry.replyToId,
     replyToMode: params.entry.replyToMode,
     threadId: params.entry.threadId,
     silent: params.entry.silent,

@@ -2355,15 +2355,10 @@ describe("deliverOutboundPayloads", () => {
       to: "!room",
       payloads: [{ text: "abcd" }],
       replyToId: "777",
-      replyToAuthor: "ambient-author",
       replyToMode: "first",
     });
 
     expect(sendText.mock.calls.map((call) => call[0]?.replyToId)).toEqual(["777", undefined]);
-    expect(sendText.mock.calls.map((call) => call[0]?.replyToAuthor)).toEqual([
-      "ambient-author",
-      undefined,
-    ]);
   });
 
   it("suppresses fallback replyToId when replyToMode is off but preserves explicit payload replies", async () => {
@@ -2409,45 +2404,6 @@ describe("deliverOutboundPayloads", () => {
         ([event]) => (event as { replyToId?: string }).replyToId,
       ),
     ).toEqual([undefined, "payload-reply"]);
-  });
-
-  it("clears the ambient reply author when a payload retargets replyToId", async () => {
-    const sendText = vi.fn().mockImplementation(async ({ text }: { text: string }) => ({
-      channel: "matrix" as const,
-      messageId: text,
-      roomId: "!room",
-    }));
-    setActivePluginRegistry(
-      createTestRegistry([
-        {
-          pluginId: "matrix",
-          source: "test",
-          plugin: createOutboundTestPlugin({
-            id: "matrix",
-            outbound: {
-              deliveryMode: "direct",
-              sendText,
-            },
-          }),
-        },
-      ]),
-    );
-
-    await deliverOutboundPayloads({
-      cfg: {},
-      channel: "matrix",
-      to: "!room",
-      payloads: [{ text: "explicit", replyToId: "payload-reply" }],
-      replyToId: "ambient-reply",
-      replyToAuthor: "ambient-author",
-      replyToMode: "all",
-    });
-
-    expect(sendText).toHaveBeenCalledTimes(1);
-    expect(sendText.mock.calls[0]?.[0]).toMatchObject({
-      replyToId: "payload-reply",
-      replyToAuthor: undefined,
-    });
   });
 
   it("does not let explicit payload replies consume the implicit single-use reply slot", async () => {

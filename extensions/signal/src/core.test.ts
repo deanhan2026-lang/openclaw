@@ -23,6 +23,10 @@ import {
   resolveSignalSender,
 } from "./identity.js";
 import { probeSignal } from "./probe.js";
+import {
+  clearSignalReplyAuthorsForTest,
+  registerSignalReplyAuthorForInboundMessage,
+} from "./reply-authors.js";
 import { clearSignalRuntime } from "./runtime.js";
 import {
   createSignalCliPathTextInput,
@@ -1114,12 +1118,17 @@ describe("signal outbound", () => {
           expect(result?.receipt.platformMessageIds).toEqual(["signal-media-1"]);
         },
         replyTo: async () => {
+          await registerSignalReplyAuthorForInboundMessage({
+            accountId: "default",
+            to: "signal:group:group-1",
+            replyToId: "1700000000006",
+            author: "uuid:sender-1",
+          });
           const result = await signalPlugin.message?.send?.text?.({
             cfg: {} as OpenClawConfig,
             to: "signal:group:group-1",
             text: "reply",
             replyToId: "1700000000006",
-            replyToAuthor: "uuid:sender-1",
             deps,
           } as Parameters<NonNullable<typeof signalPlugin.message.send.text>>[0] & {
             deps: typeof deps;
@@ -1136,6 +1145,7 @@ describe("signal outbound", () => {
             }),
           );
           expect(result?.receipt.platformMessageIds).toEqual(["signal-text-1"]);
+          await clearSignalReplyAuthorsForTest();
         },
       },
     });

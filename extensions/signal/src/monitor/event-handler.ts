@@ -74,6 +74,7 @@ import {
 } from "../identity.js";
 import { normalizeSignalMessagingTarget } from "../normalize.js";
 import { resolveSignalReactionLevel } from "../reaction-level.js";
+import { registerSignalReplyAuthorForInboundMessage } from "../reply-authors.js";
 import {
   removeReactionSignal,
   sendReactionSignal,
@@ -1190,6 +1191,14 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       typeof nativeReplyTargetTimestamp === "number"
         ? String(nativeReplyTargetTimestamp)
         : undefined;
+    const signalToRaw = isGroup ? `group:${groupId}` : `signal:${senderRecipient}`;
+    const signalTo = normalizeSignalMessagingTarget(signalToRaw) ?? signalToRaw;
+    await registerSignalReplyAuthorForInboundMessage({
+      accountId: deps.accountId,
+      to: signalTo,
+      replyToId: messageId,
+      author: senderRecipient,
+    });
     await inboundDebouncer.enqueue({
       senderName,
       senderDisplay,

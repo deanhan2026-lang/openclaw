@@ -20,14 +20,7 @@ import type { ChannelDeliveryInfo, ChannelDeliveryResult } from "./types.js";
 /** Options controlling durable final delivery for inbound channel replies. */
 export type DurableInboundReplyDeliveryOptions = Pick<
   DeliverOutboundPayloadsParams,
-  | "deps"
-  | "formatting"
-  | "identity"
-  | "mediaAccess"
-  | "replyToAuthor"
-  | "replyToMode"
-  | "silent"
-  | "threadId"
+  "deps" | "formatting" | "identity" | "mediaAccess" | "replyToMode" | "silent" | "threadId"
 > & {
   to?: string | null;
   replyToId?: string | null;
@@ -81,31 +74,6 @@ export function resolveDurableInboundReplyToId(
     normalizeOptionalString(params.payload.replyToId) ??
     normalizeOptionalString(params.ctxPayload.ReplyToIdFull) ??
     normalizeOptionalString(params.ctxPayload.ReplyToId)
-  );
-}
-
-export function resolveDurableInboundReplyToAuthor(
-  params: Pick<DurableInboundReplyDeliveryParams, "ctxPayload" | "replyToAuthor"> & {
-    resolvedReplyToId?: string | null;
-  },
-): string | undefined {
-  const explicitAuthor = normalizeOptionalString(params.replyToAuthor);
-  if (explicitAuthor) {
-    return explicitAuthor;
-  }
-  const replyToId = normalizeOptionalString(params.resolvedReplyToId);
-  if (!replyToId) {
-    return undefined;
-  }
-  const currentReplyToId =
-    normalizeOptionalString(params.ctxPayload.ReplyToIdFull) ??
-    normalizeOptionalString(params.ctxPayload.ReplyToId);
-  if (replyToId !== currentReplyToId) {
-    return undefined;
-  }
-  return (
-    normalizeOptionalString(params.ctxPayload.SenderE164) ??
-    normalizeOptionalString(params.ctxPayload.SenderId)
   );
 }
 
@@ -181,11 +149,6 @@ export async function deliverInboundReplyWithMessageSendContext(
   }
 
   const replyToId = resolveDurableInboundReplyToId(params);
-  const replyToAuthor = resolveDurableInboundReplyToAuthor({
-    ctxPayload: params.ctxPayload,
-    replyToAuthor: params.replyToAuthor,
-    resolvedReplyToId: replyToId,
-  });
   const threadId = resolveDurableInboundReplyThreadId(params);
   const requiredCapabilities =
     params.requiredCapabilities ??
@@ -237,7 +200,6 @@ export async function deliverInboundReplyWithMessageSendContext(
     payloads: [params.payload],
     threadId,
     replyToId,
-    replyToAuthor,
     replyToMode: params.replyToMode,
     formatting: params.formatting,
     identity: params.identity,

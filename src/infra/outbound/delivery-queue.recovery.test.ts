@@ -550,7 +550,6 @@ describe("delivery-queue recovery", () => {
         accountId: "acct-1",
         payloads: [{ text: "maybe sent" }],
         replyToId: "root-message",
-        replyToAuthor: "uuid:sender-1",
         threadId: "thread-1",
         silent: true,
       },
@@ -604,7 +603,6 @@ describe("delivery-queue recovery", () => {
       accountId?: string;
       payloads?: unknown;
       replyToId?: string;
-      replyToAuthor?: string;
       effectiveReplyToId?: string;
       threadId?: string;
       silent?: boolean;
@@ -617,7 +615,6 @@ describe("delivery-queue recovery", () => {
     expect(reconcileInput.accountId).toBe("acct-1");
     expect(reconcileInput.payloads).toEqual([{ text: "maybe sent" }]);
     expect(reconcileInput.replyToId).toBe("root-message");
-    expect(reconcileInput.replyToAuthor).toBe("uuid:sender-1");
     expect(reconcileInput.effectiveReplyToId).toBe("hooked-root-message");
     expect(reconcileInput.threadId).toBe("thread-1");
     expect(reconcileInput.silent).toBe(true);
@@ -628,7 +625,6 @@ describe("delivery-queue recovery", () => {
       to?: string;
       accountId?: string;
       replyToId?: string;
-      replyToAuthor?: string;
       threadId?: string;
       silent?: boolean;
       result?: { messageId?: string };
@@ -637,61 +633,10 @@ describe("delivery-queue recovery", () => {
     expect(afterCommitInput.to).toBe("+1");
     expect(afterCommitInput.accountId).toBe("acct-1");
     expect(afterCommitInput.replyToId).toBe("hooked-root-message");
-    expect(afterCommitInput.replyToAuthor).toBeUndefined();
     expect(afterCommitInput.threadId).toBe("thread-1");
     expect(afterCommitInput.silent).toBe(true);
     expect(afterCommitInput.result?.messageId).toBe("platform-1");
     expect(order).toEqual(["afterCommit"]);
-    expect(await loadPendingDeliveries(tmpDir())).toHaveLength(0);
-  });
-
-  it("preserves reply authors in reconciled commit hooks when the effective reply id still matches", async () => {
-    const id = await enqueueDelivery(
-      {
-        channel: "demo-channel-a",
-        to: "+1",
-        accountId: "acct-1",
-        payloads: [{ text: "maybe sent" }],
-        replyToId: "root-message",
-        replyToAuthor: "uuid:sender-1",
-      },
-      tmpDir(),
-    );
-    await markDeliveryPlatformSendAttemptStarted(id, tmpDir(), {
-      replyToId: "root-message",
-    });
-    await markDeliveryPlatformOutcomeUnknown(id, tmpDir());
-    const afterCommit = vi.fn();
-    resolveOutboundChannelMessageAdapterMock.mockReturnValue({
-      durableFinal: {
-        capabilities: { reconcileUnknownSend: true },
-        reconcileUnknownSend: vi.fn().mockResolvedValue({
-          status: "sent",
-          messageId: "platform-1",
-          receipt: {
-            primaryPlatformMessageId: "platform-1",
-            platformMessageIds: ["platform-1"],
-            parts: [{ platformMessageId: "platform-1", kind: "text", index: 0 }],
-            sentAt: 1,
-          },
-        }),
-      },
-      send: {
-        lifecycle: {
-          afterCommit,
-        },
-      },
-    });
-
-    const { result } = await runRecovery({ deliver: vi.fn().mockResolvedValue([]) });
-
-    expect(result.recovered).toBe(1);
-    const afterCommitInput = mockCallArg(afterCommit) as {
-      replyToId?: string;
-      replyToAuthor?: string;
-    };
-    expect(afterCommitInput.replyToId).toBe("root-message");
-    expect(afterCommitInput.replyToAuthor).toBe("uuid:sender-1");
     expect(await loadPendingDeliveries(tmpDir())).toHaveLength(0);
   });
 
@@ -1175,7 +1120,6 @@ describe("delivery-queue recovery", () => {
         to: "+1",
         payloads: [{ text: "a" }],
         replyToId: "root-message",
-        replyToAuthor: "uuid:sender-1",
         replyToMode: "first",
         formatting: {
           textLimit: 1234,
@@ -1213,7 +1157,6 @@ describe("delivery-queue recovery", () => {
       gifPlayback?: boolean;
       silent?: boolean;
       replyToId?: string;
-      replyToAuthor?: string;
       replyToMode?: string;
       formatting?: unknown;
       gatewayClientScopes?: string[];
@@ -1224,7 +1167,6 @@ describe("delivery-queue recovery", () => {
     expect(deliverInput.gifPlayback).toBe(true);
     expect(deliverInput.silent).toBe(true);
     expect(deliverInput.replyToId).toBe("root-message");
-    expect(deliverInput.replyToAuthor).toBe("uuid:sender-1");
     expect(deliverInput.replyToMode).toBe("first");
     expect(deliverInput.formatting).toEqual({
       textLimit: 1234,
