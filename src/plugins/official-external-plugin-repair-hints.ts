@@ -29,6 +29,13 @@ function formatPluginInstallHintCommand(installSpec: string): string {
     : `${command} ${NON_CLAWHUB_INSTALL_ACK_FLAG}`;
 }
 
+function formatDoctorFixHintCommand(installSpec: string): string {
+  const command = "openclaw doctor --fix";
+  return installSpec.trim().toLowerCase().startsWith("clawhub:")
+    ? command
+    : `${command} ${NON_CLAWHUB_INSTALL_ACK_FLAG}`;
+}
+
 /** Resolves install/doctor commands for an official external plugin or channel id. */
 export function resolveOfficialExternalPluginRepairHint(
   pluginIdOrChannelId: string,
@@ -50,7 +57,7 @@ export function resolveOfficialExternalPluginRepairHint(
   const channelId = manifest?.channel?.id?.trim();
   const label = resolveOfficialExternalPluginLabel(entry);
   const installCommand = formatPluginInstallHintCommand(installSpec);
-  const doctorFixCommand = "openclaw doctor --fix";
+  const doctorFixCommand = formatDoctorFixHintCommand(installSpec);
   return {
     pluginId,
     ...(channelId ? { channelId } : {}),

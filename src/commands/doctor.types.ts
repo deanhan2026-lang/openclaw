@@ -6,6 +6,7 @@ export type DoctorOptions = {
   deep?: boolean;
   repair?: boolean;
   force?: boolean;
+  acknowledgeNonClawHubInstall?: boolean;
   generateGatewayToken?: boolean;
   allowExec?: boolean;
   postUpgrade?: boolean;

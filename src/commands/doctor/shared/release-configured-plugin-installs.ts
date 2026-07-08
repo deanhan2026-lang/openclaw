@@ -23,7 +23,10 @@ import {
 } from "../../../plugins/web-search-install-catalog.js";
 import { VERSION } from "../../../version.js";
 import { collectConfiguredProviderPluginIds } from "./configured-provider-plugin-installs.js";
-import { repairMissingPluginInstallsForIds } from "./missing-configured-plugin-install.js";
+import {
+  repairMissingPluginInstallsForIds,
+  type NonClawHubInstallAcknowledgementRequest,
+} from "./missing-configured-plugin-install.js";
 import { asObjectRecord } from "./object.js";
 import { shouldDeferConfiguredPluginInstallRepair } from "./update-phase.js";
 
@@ -345,6 +348,10 @@ export async function maybeRunConfiguredPluginInstallReleaseStep(params: {
   env?: NodeJS.ProcessEnv;
   touchedVersion?: string | null;
   currentVersion?: string | null;
+  acknowledgeNonClawHubInstall?: boolean;
+  onNonClawHubInstall?: (
+    request: NonClawHubInstallAcknowledgementRequest,
+  ) => boolean | Promise<boolean>;
 }): Promise<{
   changes: string[];
   warnings: string[];
@@ -369,6 +376,8 @@ export async function maybeRunConfiguredPluginInstallReleaseStep(params: {
       channelIds: configured.channelIds,
       blockedPluginIds: collectBlockedPluginIds(params.cfg),
       env,
+      ...(params.acknowledgeNonClawHubInstall ? { acknowledgeNonClawHubInstall: true } : {}),
+      ...(params.onNonClawHubInstall ? { onNonClawHubInstall: params.onNonClawHubInstall } : {}),
     });
     const warnings = [...repaired.warnings, ...(repaired.notices ?? [])];
     const postInstallDoctorResult = createPostInstallDoctorResultForDeferredRepair({
@@ -393,6 +402,8 @@ export async function maybeRunConfiguredPluginInstallReleaseStep(params: {
     channelIds: configured.channelIds,
     blockedPluginIds: collectBlockedPluginIds(params.cfg),
     env,
+    ...(params.acknowledgeNonClawHubInstall ? { acknowledgeNonClawHubInstall: true } : {}),
+    ...(params.onNonClawHubInstall ? { onNonClawHubInstall: params.onNonClawHubInstall } : {}),
   });
   const completed = repaired.warnings.length === 0 && !updateInProgress;
   const warnings = [...repaired.warnings, ...(repaired.notices ?? [])];

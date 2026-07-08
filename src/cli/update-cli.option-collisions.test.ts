@@ -49,6 +49,7 @@ function firstCallOptions(mock: { mock: { calls: unknown[][] } }) {
 
 type UpdateFinalizeCommandOptions = {
   acknowledgeClawHubRisk?: boolean;
+  acknowledgeNonClawHubInstall?: boolean;
   json?: boolean;
   timeout?: string;
   restart?: boolean;
@@ -83,6 +84,7 @@ describe("update cli option collisions", () => {
       argv: [
         "update",
         "--acknowledge-clawhub-risk",
+        "--acknowledge-non-clawhub-install",
         "finalize",
         "--json",
         "--timeout",
@@ -98,6 +100,7 @@ describe("update cli option collisions", () => {
         expect(opts?.timeout).toBe("17");
         expect(opts?.restart).toBe(false);
         expect(opts?.acknowledgeClawHubRisk).toBe(true);
+        expect(opts?.acknowledgeNonClawHubInstall).toBe(true);
       },
     },
     {

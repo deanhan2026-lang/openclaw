@@ -107,6 +107,7 @@ export async function runPostCorePluginConvergence(params: {
   baselineInstallRecords?: Record<string, PluginInstallRecord>;
   acknowledgeClawHubRisk?: boolean;
   onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
+  acknowledgeNonClawHubInstall?: boolean;
 }): Promise<PostCoreConvergenceResult> {
   const env: NodeJS.ProcessEnv = {
     ...params.env,
@@ -126,6 +127,7 @@ export async function runPostCorePluginConvergence(params: {
     ...(prunedBaseline ? { baselineRecords: prunedBaseline.records } : {}),
     ...(params.acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
     ...(params.onClawHubRisk ? { onClawHubRisk: params.onClawHubRisk } : {}),
+    ...(params.acknowledgeNonClawHubInstall ? { acknowledgeNonClawHubInstall: true } : {}),
   });
 
   const warnings: PostCoreConvergenceWarning[] = repair.warnings.map((message) => ({

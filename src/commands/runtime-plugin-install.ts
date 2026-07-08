@@ -155,6 +155,7 @@ async function repairRuntimePluginInstallForModelSelection(params: {
   const result = await repairMissingPluginInstallsForIds({
     cfg: params.cfg,
     pluginIds: [params.descriptor.pluginId],
+    acknowledgeNonClawHubInstall: true,
     ...(params.env !== undefined ? { env: params.env } : {}),
   });
   return {

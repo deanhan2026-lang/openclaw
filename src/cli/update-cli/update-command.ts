@@ -2381,6 +2381,7 @@ export async function updatePluginsAfterCoreUpdate(params: {
     env: process.env,
     baselineInstallRecords: convergenceBaselineRecords,
     ...clawHubRiskAcknowledgementOptions,
+    ...(params.opts.acknowledgeNonClawHubInstall ? { acknowledgeNonClawHubInstall: true } : {}),
   });
   for (const change of convergence.changes) {
     if (!params.opts.json) {
@@ -3020,6 +3021,7 @@ export async function updateFinalizeCommand(opts: UpdateFinalizeOptions): Promis
         yes: opts.yes,
         restart: false,
         acknowledgeClawHubRisk: opts.acknowledgeClawHubRisk,
+        acknowledgeNonClawHubInstall: opts.acknowledgeNonClawHubInstall,
       },
       timeoutMs: timeoutMs ?? DEFAULT_UPDATE_STEP_TIMEOUT_MS,
       pluginInstallRecords,
@@ -3451,6 +3453,9 @@ async function continuePostCoreUpdateInFreshProcess(params: {
   }
   if (params.opts.acknowledgeClawHubRisk) {
     argv.push("--acknowledge-clawhub-risk");
+  }
+  if (params.opts.acknowledgeNonClawHubInstall) {
+    argv.push("--acknowledge-non-clawhub-install");
   }
   if (params.opts.timeout) {
     argv.push("--timeout", params.opts.timeout);

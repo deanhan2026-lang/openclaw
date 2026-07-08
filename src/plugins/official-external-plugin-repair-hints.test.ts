@@ -38,9 +38,9 @@ describe("resolveMissingOfficialExternalChannelPluginRepairHint", () => {
       label: "Feishu",
       installSpec: "@openclaw/feishu",
       installCommand: "openclaw plugins install @openclaw/feishu --acknowledge-non-clawhub-install",
-      doctorFixCommand: "openclaw doctor --fix",
+      doctorFixCommand: "openclaw doctor --fix --acknowledge-non-clawhub-install",
       repairHint:
-        "Install the official external plugin with: openclaw plugins install @openclaw/feishu --acknowledge-non-clawhub-install, or run: openclaw doctor --fix.",
+        "Install the official external plugin with: openclaw plugins install @openclaw/feishu --acknowledge-non-clawhub-install, or run: openclaw doctor --fix --acknowledge-non-clawhub-install.",
     });
   });
 

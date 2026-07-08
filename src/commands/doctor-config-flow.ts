@@ -302,6 +302,8 @@ export async function loadAndMaybeMigrateDoctorConfig(params: {
       state: { cfg, candidate, pendingChanges, fixHints },
       doctorFixCommand,
       env: process.env,
+      acknowledgeNonClawHubInstall: params.options.acknowledgeNonClawHubInstall === true,
+      prompter: params.prompter,
     });
     ({ cfg, candidate, pendingChanges, fixHints } = repairSequence.state);
     if (repairSequence.authProfilesRepaired) {

@@ -1,6 +1,10 @@
 // Doctor health contribution helpers collect health checks from plugin manifests.
 import fs from "node:fs";
 import nodePath from "node:path";
+import {
+  formatNonClawHubInstallWarning,
+  type NonClawHubInstallSourceClass,
+} from "../cli/non-clawhub-install-acknowledgement.js";
 import type { probeGatewayMemoryStatus } from "../commands/doctor-gateway-health.js";
 import type { DoctorOptions, DoctorPrompter } from "../commands/doctor-prompter.js";
 import {
@@ -582,10 +586,21 @@ async function runReleaseConfiguredPluginInstallsHealth(
     await import("../commands/doctor/shared/release-configured-plugin-installs.js");
   const { note } = await loadNoteModule();
   const { VERSION } = await import("../version.js");
+  const confirmNonClawHubRepairInstall = async (request: {
+    sourceClass: NonClawHubInstallSourceClass;
+    spec: string;
+  }) =>
+    await ctx.prompter.confirmRuntimeRepair({
+      message: `${formatNonClawHubInstallWarning(request)}\nInstall this non-ClawHub plugin source during doctor repair?`,
+      initialValue: false,
+      requiresInteractiveConfirmation: true,
+    });
   const result = await maybeRunConfiguredPluginInstallReleaseStep({
     cfg: ctx.cfg,
     env: ctx.env ?? process.env,
     touchedVersion: ctx.configResult.sourceLastTouchedVersion ?? ctx.cfg.meta?.lastTouchedVersion,
+    acknowledgeNonClawHubInstall: ctx.options.acknowledgeNonClawHubInstall === true,
+    onNonClawHubInstall: confirmNonClawHubRepairInstall,
   });
   if (result.postInstallDoctorResult) {
     ctx.postInstallDoctorResult = result.postInstallDoctorResult;

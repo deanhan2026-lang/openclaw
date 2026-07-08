@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 type MissingPluginInstallRepairCall = {
   pluginIds: string[];
   env?: NodeJS.ProcessEnv;
+  acknowledgeNonClawHubInstall?: boolean;
 };
 
 function readOnlyMissingPluginInstallRepairCall(): MissingPluginInstallRepairCall {
@@ -53,6 +54,7 @@ describe("Codex runtime plugin install repair", () => {
     const repairCall = readOnlyMissingPluginInstallRepairCall();
     expect(repairCall.pluginIds).toStrictEqual(["codex"]);
     expect(repairCall.env).toStrictEqual({});
+    expect(repairCall.acknowledgeNonClawHubInstall).toBe(true);
     expect(result).toStrictEqual({
       required: true,
       changes: ['Repaired missing configured plugin "codex".'],
