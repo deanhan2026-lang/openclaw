@@ -24,6 +24,7 @@ type MemoryReplyAuthorRecord = SignalReplyAuthorRecord & {
 };
 
 const memoryReplyAuthors = new Map<string, MemoryReplyAuthorRecord>();
+let persistentStoreDisabled = false;
 
 function resolveAccountKey(accountId?: string | null): string {
   return normalizeLowercaseStringOrEmpty(normalizeOptionalString(accountId) ?? DEFAULT_ACCOUNT_ID);
@@ -34,11 +35,23 @@ function resolveConversationKey(to: string): string | undefined {
 }
 
 function openSignalReplyAuthorStore() {
-  return getOptionalSignalRuntime()?.state.openKeyedStore<SignalReplyAuthorRecord>({
-    namespace: PERSISTENT_NAMESPACE,
-    maxEntries: PERSISTENT_MAX_ENTRIES,
-    defaultTtlMs: DEFAULT_REPLY_AUTHOR_TTL_MS,
-  });
+  if (persistentStoreDisabled) {
+    return undefined;
+  }
+  const runtime = getOptionalSignalRuntime();
+  try {
+    return runtime?.state.openKeyedStore<SignalReplyAuthorRecord>({
+      namespace: PERSISTENT_NAMESPACE,
+      maxEntries: PERSISTENT_MAX_ENTRIES,
+      defaultTtlMs: DEFAULT_REPLY_AUTHOR_TTL_MS,
+    });
+  } catch (error) {
+    persistentStoreDisabled = true;
+    runtime?.logging
+      .getChildLogger({ plugin: "signal", feature: "reply-author-state" })
+      .warn("Signal persistent reply author state unavailable", { error: String(error) });
+    return undefined;
+  }
 }
 
 function buildSignalReplyAuthorStoreKey(params: {
@@ -151,5 +164,6 @@ export async function resolveSignalReplyAuthorWithPersistence(params: {
 
 export async function clearSignalReplyAuthorsForTest(): Promise<void> {
   memoryReplyAuthors.clear();
+  persistentStoreDisabled = false;
   await openSignalReplyAuthorStore()?.clear();
 }

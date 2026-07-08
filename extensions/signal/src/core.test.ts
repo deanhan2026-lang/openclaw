@@ -26,8 +26,9 @@ import { probeSignal } from "./probe.js";
 import {
   clearSignalReplyAuthorsForTest,
   registerSignalReplyAuthorForInboundMessage,
+  resolveSignalReplyAuthorWithPersistence,
 } from "./reply-authors.js";
-import { clearSignalRuntime } from "./runtime.js";
+import { clearSignalRuntime, setSignalRuntime } from "./runtime.js";
 import {
   createSignalCliPathTextInput,
   normalizeSignalAccountInput,
@@ -1165,6 +1166,36 @@ describe("signal outbound", () => {
       { capability: "afterSendSuccess", status: "not_declared" },
       { capability: "afterCommit", status: "not_declared" },
     ]);
+  });
+
+  it("keeps reply author registration in memory when persistent state cannot open", async () => {
+    setSignalRuntime({
+      state: {
+        openKeyedStore: () => {
+          throw new Error("state unavailable");
+        },
+      },
+      logging: {
+        getChildLogger: () => ({ warn: vi.fn() }),
+      },
+    } as any);
+
+    await registerSignalReplyAuthorForInboundMessage({
+      accountId: "default",
+      to: "signal:group:group-1",
+      replyToId: "1700000000007",
+      author: "uuid:sender-1",
+    });
+
+    await expect(
+      resolveSignalReplyAuthorWithPersistence({
+        accountId: "default",
+        to: "signal:group:group-1",
+        replyToId: "1700000000007",
+      }),
+    ).resolves.toBe("uuid:sender-1");
+    await clearSignalReplyAuthorsForTest();
+    clearSignalRuntime();
   });
 });
 
