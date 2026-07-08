@@ -265,7 +265,7 @@ two-party event loops that do not go through the shared inbound reply runner.
     ```
 
     <Warning>
-    Model overrides (`provider`/`model`) require operator opt-in via `plugins.entries.<id>.subagent.allowModelOverride: true` in config. Untrusted plugins can still run subagents, but override requests are rejected.
+    Unless the calling Gateway client already has override authority (admin scope), model overrides (`provider`/`model`) require operator opt-in via `plugins.entries.<id>.subagent.allowModelOverride: true` in config — in every execution context, including runs spawned from interactive sessions. Use `plugins.entries.<id>.subagent.allowedModels` to bound the targets. Untrusted plugins can still run subagents, but override requests are rejected.
     </Warning>
 
     `deleteSession(...)` can delete sessions created by the same plugin through `api.runtime.subagent.run(...)`. Deleting arbitrary user or operator sessions still requires an admin-scoped Gateway request.

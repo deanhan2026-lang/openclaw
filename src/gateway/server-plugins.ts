@@ -173,7 +173,9 @@ export function setPluginSubagentOverridePolicies(cfg: OpenClawConfig): void {
   pluginSubagentPolicyState.policies = policies;
 }
 
-function authorizeFallbackModelOverride(params: {
+// Evaluates the operator's per-plugin opt-in (plugins.entries.<id>.subagent.*)
+// for a requested subagent model override; fails closed without plugin identity.
+function authorizePluginModelOverride(params: {
   pluginId?: string;
   provider?: string;
   model?: string;
@@ -183,7 +185,7 @@ function authorizeFallbackModelOverride(params: {
   if (!pluginId) {
     return {
       allowed: false,
-      reason: "provider/model override requires plugin identity in fallback subagent runs.",
+      reason: "provider/model override requires plugin identity for plugin subagent runs.",
     };
   }
   const policy = pluginSubagentPolicyState.policies[pluginId];
@@ -191,7 +193,7 @@ function authorizeFallbackModelOverride(params: {
     return {
       allowed: false,
       reason:
-        `plugin "${pluginId}" is not trusted for fallback provider/model override requests. ` +
+        `plugin "${pluginId}" is not trusted for provider/model override requests. ` +
         "See https://docs.openclaw.ai/plugins/sdk-runtime#api-runtime-subagent and search for: " +
         "plugins.entries.<id>.subagent.allowModelOverride",
     };
@@ -208,12 +210,12 @@ function authorizeFallbackModelOverride(params: {
   if (policy.allowedModels.size === 0) {
     return { allowed: true };
   }
-  const requestedModelRef = resolveRequestedFallbackModelRef(params);
+  const requestedModelRef = resolveRequestedOverrideModelRef(params);
   if (!requestedModelRef) {
     return {
       allowed: false,
       reason:
-        "fallback provider/model overrides that use an allowlist must resolve to a canonical provider/model target.",
+        "provider/model overrides that use an allowlist must resolve to a canonical provider/model target.",
     };
   }
   if (policy.allowedModels.has(requestedModelRef)) {
@@ -225,7 +227,7 @@ function authorizeFallbackModelOverride(params: {
   };
 }
 
-function resolveRequestedFallbackModelRef(params: {
+function resolveRequestedOverrideModelRef(params: {
   provider?: string;
   model?: string;
 }): string | null {
@@ -320,9 +322,9 @@ function resolveRuntimeNodeInvokeSyntheticScopes(params: {
 
 function mergeGatewayClientInternal(
   client: GatewayRequestOptions["client"] | undefined,
-  internal: NonNullable<GatewayRequestOptions["client"]>["internal"],
+  internal: NonNullable<NonNullable<GatewayRequestOptions["client"]>["internal"]>,
 ): GatewayRequestOptions["client"] {
-  if (!client || !internal) {
+  if (!client || Object.keys(internal).length === 0) {
     return client ?? null;
   }
   return {
@@ -335,7 +337,8 @@ function mergeGatewayClientInternal(
 }
 
 type DispatchGatewayMethodInProcessOptions = {
-  allowSyntheticModelOverride?: boolean;
+  /** Carry policy-authorized model-override authority into the dispatched request's client. */
+  allowModelOverride?: boolean;
   agentRunTracking?: "plugin_subagent";
   disableSyntheticClient?: boolean;
   expectFinal?: boolean;
@@ -448,21 +451,21 @@ export async function dispatchGatewayMethodInProcessRaw(
     typeof options?.pluginRuntimeOwnerId === "string" && options.pluginRuntimeOwnerId.trim()
       ? options.pluginRuntimeOwnerId.trim()
       : undefined;
+  const allowModelOverride = options?.allowModelOverride === true;
   const syntheticClient = createSyntheticOperatorClient({
-    allowModelOverride: options?.allowSyntheticModelOverride === true,
+    allowModelOverride,
     agentRunTracking: options?.agentRunTracking,
     ...(pluginRuntimeOwnerId ? { pluginRuntimeOwnerId } : {}),
     scopes: options?.syntheticScopes,
   });
-  const scopedClient = mergeGatewayClientInternal(
-    scope?.client,
-    pluginRuntimeOwnerId || options?.agentRunTracking
-      ? {
-          ...(options?.agentRunTracking ? { agentRunTracking: options.agentRunTracking } : {}),
-          ...(pluginRuntimeOwnerId ? { pluginRuntimeOwnerId } : {}),
-        }
-      : undefined,
-  );
+  // Policy-authorized override authority rides the dispatched request's client
+  // via the merged internal flag; the merge copies the client, so the grant
+  // never leaks back to the caller's live connection.
+  const scopedClient = mergeGatewayClientInternal(scope?.client, {
+    ...(options?.agentRunTracking ? { agentRunTracking: options.agentRunTracking } : {}),
+    ...(pluginRuntimeOwnerId ? { pluginRuntimeOwnerId } : {}),
+    ...(allowModelOverride ? { allowModelOverride: true } : {}),
+  });
   if (options?.disableSyntheticClient === true && !scopedClient) {
     throw new Error(`In-process gateway dispatch requires a scoped client (method: ${method}).`);
   }
@@ -614,23 +617,20 @@ export function createGatewaySubagentRuntime(): PluginRuntime["subagent"] {
           ? scope.pluginId.trim()
           : undefined;
       const overrideRequested = Boolean(params.provider || params.model);
-      const hasRequestScopeClient = Boolean(scope?.client);
-      let allowOverride = hasRequestScopeClient && canClientUseModelOverride(scope?.client ?? null);
-      let allowSyntheticModelOverride = false;
-      if (overrideRequested && !allowOverride && !hasRequestScopeClient) {
-        const fallbackAuth = authorizeFallbackModelOverride({
+      // Fail closed: overrides need caller authority (admin scope / internal
+      // flag) or the operator's per-plugin opt-in, in any execution context,
+      // so untrusted plugins cannot steer model selection (#48277).
+      let policyModelOverride = false;
+      if (overrideRequested && !canClientUseModelOverride(scope?.client ?? null)) {
+        const policyAuth = authorizePluginModelOverride({
           pluginId: scope?.pluginId,
           provider: params.provider,
           model: params.model,
         });
-        if (!fallbackAuth.allowed) {
-          throw new Error(fallbackAuth.reason);
+        if (!policyAuth.allowed) {
+          throw new Error(policyAuth.reason);
         }
-        allowOverride = true;
-        allowSyntheticModelOverride = true;
-      }
-      if (overrideRequested && !allowOverride) {
-        throw new Error("provider/model override is not authorized for this plugin subagent run.");
+        policyModelOverride = true;
       }
       const payload = await dispatchGatewayMethod<{ runId?: string }>(
         "agent",
@@ -638,8 +638,8 @@ export function createGatewaySubagentRuntime(): PluginRuntime["subagent"] {
           sessionKey: params.sessionKey,
           message: params.message,
           deliver: params.deliver ?? false,
-          ...(allowOverride && params.provider && { provider: params.provider }),
-          ...(allowOverride && params.model && { model: params.model }),
+          ...(params.provider && { provider: params.provider }),
+          ...(params.model && { model: params.model }),
           ...(params.extraSystemPrompt && { extraSystemPrompt: params.extraSystemPrompt }),
           ...(params.lane && { lane: params.lane }),
           ...(params.cwd && { cwd: params.cwd }),
@@ -651,7 +651,7 @@ export function createGatewaySubagentRuntime(): PluginRuntime["subagent"] {
           idempotencyKey: params.idempotencyKey || randomUUID(),
         },
         {
-          allowSyntheticModelOverride,
+          allowModelOverride: policyModelOverride,
           agentRunTracking: "plugin_subagent",
           ...(pluginId ? { pluginRuntimeOwnerId: pluginId } : {}),
         },
