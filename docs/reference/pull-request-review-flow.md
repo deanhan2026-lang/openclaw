@@ -67,7 +67,7 @@ feedback and use the follow-up checklist below.
 If a human contributor or maintainer has taken over the PR and is actively
 working on it, do not summon ClawSweeper or otherwise work on the PR at the same
 time. Let the human review or repair finish first. If activity stops, check
-whether the author was asked for proof or other work.
+whether the author was asked to provide proof or make other updates.
 
 ## Improve a PR during review
 
