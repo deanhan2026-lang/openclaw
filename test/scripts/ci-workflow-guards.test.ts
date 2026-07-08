@@ -333,9 +333,7 @@ describe("ci workflow guards", () => {
     expect(appCompileSdk).toBe(benchmarkCompileSdk);
     for (const job of sdkJobs) {
       const cacheStep = job.steps.find((step) => step.name === "Cache Android SDK");
-      const installStep = job.steps.find(
-        (step) => step.name === "Install Android SDK packages",
-      );
+      const installStep = job.steps.find((step) => step.name === "Install Android SDK packages");
 
       expect(cacheStep.with.key).toContain(`platform-${appCompileSdk}.0-`);
       expect(installStep.run).toContain(`"${packageId}"`);
@@ -1045,14 +1043,13 @@ describe("ci workflow guards", () => {
     expect(runStep.run).toContain("ci-routing)");
     expect(fastCoreJob["runs-on"]).toContain("matrix.runner");
     expect(smokeShardJob.name).toBe("QA Smoke CI (${{ matrix.name }})");
-    expect(smokeShardJob.strategy["max-parallel"]).toBe(3);
+    expect(smokeShardJob.strategy["max-parallel"]).toBe(2);
     expect(smokeShardJob.strategy.matrix.include.map((entry) => entry.slug)).toEqual([
       "matrix",
-      "telegram-1-of-2",
-      "telegram-2-of-2",
+      "crabline",
     ]);
     expect(smokeShardJob["runs-on"]).toContain("blacksmith-16vcpu-ubuntu-2404");
-    expect(smokeRunStep.run).toContain("createQaSmokeCiMatrix");
+    expect(smokeRunStep.run).toContain("createQaSmokeCiShard");
     expect(smokeRunStep.run).toContain("--qa-profile smoke-ci");
     expect(smokeRunStep.run).toContain("--concurrency 8");
     expect(smokeRunStep.run).toContain('scenario_args+=(--scenario "$scenario_id")');
