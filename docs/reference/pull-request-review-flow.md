@@ -147,7 +147,7 @@ the last bot comment.
 
 ## Forking the automation
 
-ClawSweeper is open source and can be forked for other repositories:
+Projects that want similar review automation can study or fork ClawSweeper:
 
 - [openclaw/clawsweeper](https://github.com/openclaw/clawsweeper)
 - [ClawSweeper docs](https://clawsweeper.bot/)
