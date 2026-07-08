@@ -323,6 +323,13 @@ describe("signal createSignalEventHandler inbound context", () => {
     expect(context.MessageSid).toBe("1700000000999");
     expect(context.ReplyToId).toBe("1700000000002");
     expect(context.Timestamp).toBe(1700000000999);
+    await expect(
+      resolveSignalReplyAuthorWithPersistence({
+        accountId: "default",
+        to: "+15550002222",
+        replyToId: "1700000000002",
+      }),
+    ).resolves.toBe("+15550002222");
   });
 
   it("preserves the last debounced message body for native reply quote metadata", async () => {
