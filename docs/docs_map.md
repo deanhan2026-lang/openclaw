@@ -8334,6 +8334,7 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
   - H2: Improve a PR during review
   - H2: When automation stays quiet
   - H2: Troubleshooting
+  - H2: Forking the automation
   - H2: Related
 
 ## reference/release-performance-sweep.md
