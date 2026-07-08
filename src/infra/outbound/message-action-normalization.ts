@@ -49,7 +49,7 @@ export function normalizeMessageActionInput(params: {
       ? normalizeOptionalString(normalizedArgs.replyToId)
       : undefined;
 
-  if (!normalizedArgs.replyTo && signalReplyToIdAlias) {
+  if (!normalizeOptionalString(normalizedArgs.replyTo) && signalReplyToIdAlias) {
     normalizedArgs.replyTo = signalReplyToIdAlias;
   }
 

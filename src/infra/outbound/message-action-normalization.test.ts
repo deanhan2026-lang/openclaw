@@ -278,6 +278,24 @@ describe("normalizeMessageActionInput", () => {
     });
   });
 
+  it("treats blank Signal replyTo values as absent before applying replyToId aliases", () => {
+    const normalized = normalizeMessageActionInput({
+      action: "send",
+      args: {
+        channel: "signal",
+        target: "+15551234567",
+        message: "threaded",
+        replyTo: "   ",
+        replyToId: "child-1",
+      },
+    });
+
+    expect(normalized).toMatchObject({
+      replyTo: "child-1",
+      replyToId: "child-1",
+    });
+  });
+
   it("does not accept replyToId as a reply target alias for other channels", () => {
     const normalized = normalizeMessageActionInput({
       action: "send",
