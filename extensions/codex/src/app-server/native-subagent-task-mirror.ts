@@ -57,8 +57,8 @@ export class CodexNativeSubagentTaskMirror {
   }
 
   markAuthoritativeCompletionExpected(childThreadId: string): void {
-    // Local transcripts and V2 agent paths can supply the real result later.
-    // Remote V1 lacks both and must keep collab-completed as its fallback.
+    // App-server history or streamed terminal events supply the real result.
+    // Callers without either path keep mirror terminal states as their fallback.
     this.expectedAuthoritativeRunIds.add(codexNativeSubagentRunId(childThreadId));
   }
 
@@ -161,7 +161,6 @@ export class CodexNativeSubagentTaskMirror {
       return;
     }
     if (statusType === "idle") {
-      this.terminalRunIds.add(runId);
       this.runtime.recordTaskRunProgressByRunId({
         runId,
         lastEventAt: eventAt,
@@ -170,6 +169,15 @@ export class CodexNativeSubagentTaskMirror {
       return;
     }
     if (statusType === "systemError") {
+      if (this.expectedAuthoritativeRunIds.has(runId)) {
+        this.terminalRunIds.delete(runId);
+        this.runtime.recordTaskRunProgressByRunId({
+          runId,
+          lastEventAt: eventAt,
+          progressSummary: "Codex native subagent hit a system error; awaiting recovery.",
+        });
+        return;
+      }
       this.terminalRunIds.add(runId);
       this.runtime.finalizeTaskRunByRunId({
         runId,
