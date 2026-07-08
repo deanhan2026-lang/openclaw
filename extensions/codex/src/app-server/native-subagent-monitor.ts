@@ -1572,7 +1572,10 @@ function delayForAttempt(delays: readonly number[], attempt: number): number {
 }
 
 function readThreadParentThreadId(thread: JsonObject | undefined): string | undefined {
-  return readString(thread, "parentThreadId")?.trim();
+  return (
+    readString(thread, "parentThreadId")?.trim() ??
+    readString(readThreadSpawnSource(thread), "parent_thread_id")?.trim()
+  );
 }
 
 function readThreadSpawnSource(thread: JsonObject | undefined): JsonObject | undefined {
