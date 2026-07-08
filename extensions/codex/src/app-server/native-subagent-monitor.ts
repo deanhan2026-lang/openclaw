@@ -875,7 +875,7 @@ export class CodexNativeSubagentMonitor {
     if (!completion || !state.requesterSessionKey || !state.taskRuntimeScope) {
       return;
     }
-    if (childState.deliveringCompletion) {
+    if (childState.deliveringCompletion || childState.completionDeliveryTimer) {
       return;
     }
     childState.deliveringCompletion = true;
