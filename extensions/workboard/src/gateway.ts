@@ -1,7 +1,7 @@
+import { WORKBOARD_STATUSES, type WorkboardCard } from "@openclaw/workboard-contract";
 // Workboard plugin module implements gateway behavior.
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import type { OpenClawPluginApi } from "../api.js";
-import { WORKBOARD_STATUSES, type WorkboardCard } from "../contract.js";
 import { dispatchAndStartWorkboardCards } from "./dispatcher.js";
 import { WorkboardStore } from "./store.js";
 

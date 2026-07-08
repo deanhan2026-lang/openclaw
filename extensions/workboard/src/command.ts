@@ -1,6 +1,6 @@
+import type { WorkboardCard } from "@openclaw/workboard-contract";
 // Workboard plugin module implements command behavior.
 import type { OpenClawPluginApi } from "../api.js";
-import type { WorkboardCard } from "../contract.js";
 import { resolveWorkboardCardByIdOrPrefix } from "./card-lookup.js";
 import {
   dispatchAndStartWorkboardCards,

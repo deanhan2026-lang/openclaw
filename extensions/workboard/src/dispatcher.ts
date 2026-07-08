@@ -1,8 +1,12 @@
 // Workboard plugin module implements dispatcher behavior.
 import path from "node:path";
+import type {
+  WorkboardCard,
+  WorkboardExecution,
+  WorkboardWorkspace,
+} from "@openclaw/workboard-contract";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import type { PluginRuntime } from "openclaw/plugin-sdk/plugin-runtime";
-import type { WorkboardCard, WorkboardExecution, WorkboardWorkspace } from "../contract.js";
 import { WorkboardStore, type WorkboardDispatchResult } from "./store.js";
 
 const DEFAULT_DISPATCH_MAX_STARTS = 3;

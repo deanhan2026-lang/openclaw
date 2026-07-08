@@ -4,7 +4,7 @@ import type {
   WorkboardBoardMetadata,
   WorkboardCard,
   WorkboardNotificationSubscription,
-} from "../contract.js";
+} from "@openclaw/workboard-contract";
 
 export type PersistedWorkboardCard = {
   version: 1;

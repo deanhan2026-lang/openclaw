@@ -1,12 +1,6 @@
 // Workboard plugin module implements store behavior.
 import { randomUUID } from "node:crypto";
 import {
-  isFutureDateTimestampMs,
-  MAX_DATE_TIMESTAMP_MS,
-  resolveExpiresAtMsFromDurationMs,
-} from "openclaw/plugin-sdk/number-runtime";
-import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
-import {
   WORKBOARD_DIAGNOSTIC_KINDS,
   WORKBOARD_DIAGNOSTIC_SEVERITIES,
   WORKBOARD_EXECUTION_ENGINES,
@@ -54,7 +48,13 @@ import {
   type WorkboardWorkerLog,
   type WorkboardWorkerProtocol,
   type WorkboardWorkspace,
-} from "../contract.js";
+} from "@openclaw/workboard-contract";
+import {
+  isFutureDateTimestampMs,
+  MAX_DATE_TIMESTAMP_MS,
+  resolveExpiresAtMsFromDurationMs,
+} from "openclaw/plugin-sdk/number-runtime";
+import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import type {
   PersistedWorkboardAttachment,
   PersistedWorkboardBoard,

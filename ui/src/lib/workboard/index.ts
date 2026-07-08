@@ -45,7 +45,7 @@ import {
   type WorkboardWorkerLog,
   type WorkboardWorkerProtocol,
   type WorkboardWorkspace,
-} from "@openclaw/workboard/contract.js";
+} from "@openclaw/workboard-contract";
 import { GatewayRequestError, type GatewayBrowserClient } from "../../api/gateway.ts";
 import type { GatewaySessionRow } from "../../api/types.ts";
 import { requestSessionCreate } from "../sessions/index.ts";

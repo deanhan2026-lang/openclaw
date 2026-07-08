@@ -751,6 +751,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
 
+  extensions/featherless:
+    devDependencies:
+      '@openclaw/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+
   extensions/feishu:
     dependencies:
       '@larksuiteoapi/node-sdk':
@@ -778,12 +784,6 @@ importers:
       typebox:
         specifier: 1.3.3
         version: 1.3.3
-    devDependencies:
-      '@openclaw/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-
-  extensions/featherless:
     devDependencies:
       '@openclaw/plugin-sdk':
         specifier: workspace:*
@@ -975,12 +975,6 @@ importers:
 
   extensions/lmstudio: {}
 
-  extensions/longcat:
-    devDependencies:
-      '@openclaw/plugin-sdk':
-        specifier: workspace:*
-        version: link:../../packages/plugin-sdk
-
   extensions/lobster:
     dependencies:
       '@clawdbot/lobster':
@@ -1002,6 +996,12 @@ importers:
       openclaw:
         specifier: workspace:*
         version: link:../..
+
+  extensions/longcat:
+    devDependencies:
+      '@openclaw/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
 
   extensions/matrix:
     dependencies:
@@ -1792,6 +1792,9 @@ importers:
       '@openclaw/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
+      '@openclaw/workboard-contract':
+        specifier: workspace:*
+        version: link:../../packages/workboard-contract
       openclaw:
         specifier: workspace:*
         version: link:../..
@@ -1979,6 +1982,8 @@ importers:
 
   packages/web-content-core: {}
 
+  packages/workboard-contract: {}
+
   ui:
     dependencies:
       '@create-markdown/preview':
@@ -1996,12 +2001,12 @@ importers:
       '@openclaw/normalization-core':
         specifier: workspace:*
         version: link:../packages/normalization-core
-      '@openclaw/workboard':
-        specifier: workspace:*
-        version: link:../extensions/workboard
       '@openclaw/uirouter':
         specifier: 0.1.0
         version: 0.1.0
+      '@openclaw/workboard-contract':
+        specifier: workspace:*
+        version: link:../packages/workboard-contract
       dompurify:
         specifier: 3.4.11
         version: 3.4.11

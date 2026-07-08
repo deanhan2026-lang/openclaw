@@ -7,4 +7,4 @@ export type {
   WorkboardListResult,
   WorkboardPriority,
   WorkboardStatus,
-} from "./contract.js";
+} from "@openclaw/workboard-contract";
