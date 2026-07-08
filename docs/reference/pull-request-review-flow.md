@@ -141,16 +141,7 @@ or if the PR appears blocked by automation, ask in `#clawtributors` on Discord.
 Include the PR link, what you expected, when you asked, and what changed since
 the last bot comment.
 
-## Forking the automation
-
-ClawSweeper is open source and can be forked for other repositories:
-
-- [openclaw/clawsweeper](https://github.com/openclaw/clawsweeper)
-- [ClawSweeper docs](https://clawsweeper.bot/)
-
 ## Related
 
 - [Contributing](https://github.com/openclaw/openclaw/blob/main/CONTRIBUTING.md)
 - [CI pipeline](/ci)
-- [Mantis](/concepts/mantis)
-- [ClawSweeper](https://clawsweeper.bot/)
