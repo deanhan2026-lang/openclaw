@@ -51,9 +51,9 @@ PR, pushing a commit, or adding a review request. Label updates after a
 ClawSweeper run can also take time.
 
 ClawSweeper is triggered when a PR is opened. Maintainers can also queue review,
-repair, or automerge flows with labels or commands. If you have updated your
-branch, PR description, proof, or code, ask ClawSweeper for another review by
-adding a new PR comment:
+repair, or automerge flows with labels or commands. For ordinary contributor
+updates, ask ClawSweeper for another review only after you have updated the
+branch, PR description, proof, or code by adding a new PR comment:
 
 ```text
 @clawsweeper re-review
