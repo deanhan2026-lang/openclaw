@@ -353,7 +353,10 @@ export async function executeSendAction(params: {
       if (!params.ctx.mirror) {
         return;
       }
-      const mirrorText = params.ctx.mirror.text?.trim() ? params.ctx.mirror.text : pluginMessage;
+      const materializedPresentationFallback = pluginMessage !== params.message;
+      const mirrorText = materializedPresentationFallback
+        ? pluginMessage
+        : params.ctx.mirror.text?.trim() || pluginMessage;
       const mirrorMediaUrls =
         params.ctx.mirror.mediaUrls ??
         params.mediaUrls ??

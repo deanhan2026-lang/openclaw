@@ -581,12 +581,12 @@ describe("executeSendAction", () => {
         mirror: {
           sessionKey: "agent:main:discord:channel:123",
           agentId: "main",
-          text: "",
+          text: "Summary",
         },
       },
       to: "channel:123",
-      message: "",
-      payload: { text: "", presentation },
+      message: "Summary",
+      payload: { text: "Summary", presentation },
     });
 
     expect(result.handledBy).toBe("plugin");
@@ -595,13 +595,13 @@ describe("executeSendAction", () => {
     const actionCtx = expectSingleCallFirstArg(mocks.dispatchChannelMessageAction);
     expect(actionCtx.params.components).toBe(nativeComponents);
     expectFields(requireRecord(actionCtx.params, "plugin action params"), {
-      message: "Portable fallback",
+      message: "Summary\n\nPortable fallback",
       presentation,
     });
     expectMirrorWrite({
       sessionKey: "agent:main:discord:channel:123",
       agentId: "main",
-      text: "Portable fallback",
+      text: "Summary\n\nPortable fallback",
     });
   });
 
