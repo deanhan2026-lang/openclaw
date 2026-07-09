@@ -2061,6 +2061,7 @@ describe("dispatchTelegramMessage draft streaming", () => {
       await dispatcherOptions.deliver(
         {
           presentation: {
+            title: "FY25 outlook",
             blocks: [
               {
                 type: "chart",
@@ -2082,7 +2083,7 @@ describe("dispatchTelegramMessage draft streaming", () => {
     await dispatchWithContext({ context: createContext() });
 
     expect(answerDraftStream.update).toHaveBeenCalledWith(
-      "Revenue mix (pie chart)\n- Product: 60\n- Services: 40",
+      "FY25 outlook\n\nRevenue mix (pie chart)\n- Product: 60\n- Services: 40",
     );
     expect(deliverReplies).not.toHaveBeenCalled();
     expect(deliverInboundReplyWithMessageSendContext).not.toHaveBeenCalled();
@@ -2095,6 +2096,7 @@ describe("dispatchTelegramMessage draft streaming", () => {
         {
           text: "Quarterly results",
           presentation: {
+            title: "FY25 outlook",
             blocks: [
               { type: "text", text: "Do not duplicate this block" },
               {
@@ -2115,7 +2117,7 @@ describe("dispatchTelegramMessage draft streaming", () => {
     await dispatchWithContext({ context: createContext() });
 
     expect(answerDraftStream.update).toHaveBeenCalledWith(
-      "Quarterly results\n\nRevenue (bar chart)\n- USD: Q1: 12; Q2: 18",
+      "Quarterly results\n\nFY25 outlook\n\nRevenue (bar chart)\n- USD: Q1: 12; Q2: 18",
     );
     expect(answerDraftStream.update).not.toHaveBeenCalledWith(
       expect.stringContaining("Do not duplicate this block"),

@@ -1899,7 +1899,7 @@ describe("runMessageAction plugin dispatch", () => {
       vi.clearAllMocks();
     });
 
-    it("keeps presentation-only sends on action-only gateway plugins with text fallback", async () => {
+    it("keeps presentation-only sends on action-only gateway plugins", async () => {
       const cfg = {
         channels: {
           cardchat: {
@@ -1936,18 +1936,86 @@ describe("runMessageAction plugin dispatch", () => {
         mocks.callGatewayLeastPrivilege,
         "gateway least privilege call",
       );
+      const gatewayActionParams = readRecordField(
+        readRecordField(gatewayCall, "params", "gateway call params"),
+        "params",
+        "gateway action params",
+      );
+      expect(gatewayActionParams).not.toHaveProperty("message");
+      expectRecordFields(gatewayActionParams, { presentation }, "gateway action params");
+    });
+
+    it("keeps gateway-routed chart presentations on the gateway", async () => {
+      const presentation = {
+        blocks: [
+          {
+            type: "chart",
+            chartType: "line",
+            title: "Deployments",
+            categories: ["Mon", "Tue"],
+            series: [{ name: "Production", values: [2, 3] }],
+          },
+        ],
+      };
+      mocks.callGatewayLeastPrivilege.mockResolvedValueOnce({ ok: true, messageId: "card-2" });
+      setActivePluginRegistry(
+        createTestRegistry([
+          {
+            pluginId: "cardchat",
+            source: "test",
+            plugin: {
+              ...cardPlugin,
+              outbound: {
+                deliveryMode: "direct",
+                sendText: async () => ({ channel: "cardchat", messageId: "msg-test" }),
+              },
+            },
+          },
+        ]),
+      );
+
+      const result = await runMessageAction({
+        cfg: {
+          channels: {
+            cardchat: {
+              enabled: true,
+            },
+          },
+        } as OpenClawConfig,
+        action: "send",
+        params: {
+          channel: "cardchat",
+          target: "channel:test-card",
+          message: "Deployment trend",
+          presentation,
+        },
+        gateway: {
+          clientName: "cli",
+          mode: "cli",
+        },
+        dryRun: false,
+      });
+
+      expect(result.kind).toBe("send");
+      expect(result.handledBy).toBe("plugin");
+      expect(handleAction).not.toHaveBeenCalled();
+      expect(mocks.executeSendAction).not.toHaveBeenCalled();
+      const gatewayCall = readMockCallArg(
+        mocks.callGatewayLeastPrivilege,
+        "gateway least privilege call",
+      );
       expectRecordFields(
         readRecordField(
           readRecordField(gatewayCall, "params", "gateway call params"),
           "params",
           "gateway action params",
         ),
-        { message: "Presentation-only payload", presentation },
+        { message: "Deployment trend", presentation },
         "gateway action params",
       );
     });
 
-    it("routes text plus charts to core delivery", async () => {
+    it("routes local chart presentations through core delivery", async () => {
       const presentation = {
         blocks: [
           {
@@ -1970,6 +2038,10 @@ describe("runMessageAction plugin dispatch", () => {
             source: "test",
             plugin: {
               ...cardPlugin,
+              actions: {
+                ...cardPlugin.actions,
+                resolveExecutionMode: () => "local",
+              },
               outbound: {
                 deliveryMode: "direct",
                 sendText: async () => ({ channel: "cardchat", messageId: "msg-test" }),

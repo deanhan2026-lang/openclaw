@@ -516,7 +516,13 @@ function applySendPayloadPartsToActionParams(
   actionParams: Record<string, unknown>,
   parts: SendPayloadParts,
 ) {
-  actionParams.message = parts.message;
+  if (parts.message || !parts.payload.presentation) {
+    actionParams.message = parts.message;
+  } else {
+    // Presentation-only gateway handlers distinguish an omitted body from an
+    // explicit empty body when deciding whether to render semantic fallback.
+    delete actionParams.message;
+  }
   actionParams.media = parts.mediaUrl;
   actionParams.mediaUrl = parts.mediaUrl;
   actionParams.mediaUrls = parts.mediaUrls;
@@ -981,7 +987,11 @@ async function buildSendPayloadParts(params: {
   mergedMediaUrls.push(...normalizedMediaUrls);
 
   message = stripPlainTextToolCallBlocks(stripUnsupportedCitationControlMarkers(parsed.text));
-  actionParams.message = message;
+  if (message || !hasPresentation) {
+    actionParams.message = message;
+  } else {
+    delete actionParams.message;
+  }
   if (!actionParams.replyTo && parsed.replyToId) {
     actionParams.replyTo = parsed.replyToId;
   }
@@ -1017,7 +1027,11 @@ async function buildSendPayloadParts(params: {
   ) {
     throw new Error("send requires text or media");
   }
-  actionParams.message = message;
+  if (message || !hasPresentation) {
+    actionParams.message = message;
+  } else {
+    delete actionParams.message;
+  }
   const gifPlayback = readBooleanParam(actionParams, "gifPlayback") ?? false;
   const forceDocument =
     readBooleanParam(actionParams, "forceDocument") ??
@@ -1182,6 +1196,32 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
     requesterSenderE164: input.requesterSenderE164,
   });
 
+  // Gateway action ownership wins even when this process has a render-capable
+  // outbound adapter; credentials and account selection may exist only remotely.
+  const gatewayPluginAction = await runGatewayPluginMessageActionOrNull({
+    cfg,
+    params,
+    channel,
+    action,
+    accountId,
+    dryRun,
+    gateway,
+    input,
+    agentId,
+    result: (payload) => ({
+      kind: "send",
+      channel,
+      action,
+      to,
+      handledBy: "plugin",
+      payload,
+      dryRun,
+    }),
+  });
+  if (gatewayPluginAction) {
+    return gatewayPluginAction;
+  }
+
   const useCorePresentationDelivery = Boolean(
     sendPayload.payload.presentation &&
     hasCorePresentationDelivery(resolveOutboundChannelPlugin({ channel, cfg })?.outbound),
@@ -1197,32 +1237,6 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
       payload: { ...sendPayload.payload, text: fallbackMessage },
     };
     applySendPayloadPartsToActionParams(params, sendPayload);
-  }
-
-  const gatewayPluginAction = useCorePresentationDelivery
-    ? null
-    : await runGatewayPluginMessageActionOrNull({
-        cfg,
-        params,
-        channel,
-        action,
-        accountId,
-        dryRun,
-        gateway,
-        input,
-        agentId,
-        result: (payload) => ({
-          kind: "send",
-          channel,
-          action,
-          to,
-          handledBy: "plugin",
-          payload,
-          dryRun,
-        }),
-      });
-  if (gatewayPluginAction) {
-    return gatewayPluginAction;
   }
 
   const send = await executeSendAction({

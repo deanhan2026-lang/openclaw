@@ -3,7 +3,6 @@ import {
   interactiveReplyToPresentation,
   normalizeMessagePresentation,
   normalizeInteractiveReply,
-  renderMessagePresentationChartFallbackText,
   renderMessagePresentationFallbackText,
   resolveInteractiveTextFallback,
 } from "openclaw/plugin-sdk/interactive-runtime";
@@ -17,7 +16,9 @@ export function materializeTelegramChartFallback(payload: ReplyPayload): ReplyPa
     return payload;
   }
 
-  const chartText = charts.map(renderMessagePresentationChartFallbackText).join("\n\n");
+  const chartText = renderMessagePresentationFallbackText({
+    presentation: { ...presentation, blocks: charts },
+  });
   const currentText = payload.text?.trim();
   const text = currentText?.includes(chartText)
     ? currentText
@@ -25,7 +26,10 @@ export function materializeTelegramChartFallback(payload: ReplyPayload): ReplyPa
   const remainingBlocks = presentation.blocks.filter((block) => block.type !== "chart");
   const materialized: ReplyPayload = { ...payload, text };
   if (remainingBlocks.length > 0) {
-    materialized.presentation = { ...presentation, blocks: remainingBlocks };
+    // The title moved into text with the charts; retaining it on the remaining
+    // presentation would render the same heading twice.
+    const { title: _materializedTitle, ...remainingPresentation } = presentation;
+    materialized.presentation = { ...remainingPresentation, blocks: remainingBlocks };
   } else {
     delete materialized.presentation;
   }

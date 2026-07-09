@@ -235,7 +235,7 @@ function readTelegramSendContent(params: {
       : explicitContent != null && charts.length > 0
         ? renderMessagePresentationFallbackText({
             text: explicitContent,
-            presentation: { blocks: charts },
+            presentation: { ...params.presentation, blocks: charts },
           })
         : undefined;
   const interactiveText =
