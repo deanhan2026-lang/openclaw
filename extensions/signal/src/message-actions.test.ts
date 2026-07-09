@@ -107,6 +107,28 @@ describe("signalMessageActions", () => {
     expect(prepared).toBeNull();
   });
 
+  it("lets Signal replyToId aliases override ambient core reply targets", () => {
+    const prepared = signalMessageActions.prepareSendPayload?.({
+      ctx: {
+        channel: "signal",
+        action: "send",
+        cfg: {} as OpenClawConfig,
+        params: {
+          to: "+15551234567",
+          message: "threaded",
+          replyToId: "alias-1",
+        },
+      },
+      to: "+15551234567",
+      payload: { text: "threaded" },
+      replyToId: "ambient-1",
+    });
+    expect(prepared).toMatchObject({
+      text: "threaded",
+      replyToId: "alias-1",
+    });
+  });
+
   it("uses replyToId aliases when Signal send replyTo is blank", () => {
     const prepared = signalMessageActions.prepareSendPayload?.({
       ctx: {
