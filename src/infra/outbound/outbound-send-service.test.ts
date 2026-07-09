@@ -593,8 +593,9 @@ describe("executeSendAction", () => {
     expect(prepareSendPayload).toHaveBeenCalledOnce();
     expect(mocks.sendMessage).not.toHaveBeenCalled();
     const actionCtx = expectSingleCallFirstArg(mocks.dispatchChannelMessageAction);
-    expect(actionCtx.params.components).toBe(nativeComponents);
-    expectFields(requireRecord(actionCtx.params, "plugin action params"), {
+    const actionParams = requireRecord(actionCtx.params, "plugin action params");
+    expect(actionParams.components).toBe(nativeComponents);
+    expectFields(actionParams, {
       message: "Summary\n\nPortable fallback",
       presentation,
     });
