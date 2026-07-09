@@ -147,9 +147,15 @@ struct OnboardingView: View {
 
     let permissionsPageIndex = 5
 
-    /// Chat-like pages shrink the mascot so the conversation gets the room.
+    /// Only the full-page chat shrinks the mascot so the conversation gets the room.
     var usesCompactHero: Bool {
-        [self.aiPageIndex, self.onboardingChatPageIndex].contains(self.activePageIndex)
+        Self.shouldUseCompactHero(
+            activePageIndex: self.activePageIndex,
+            onboardingChatPageIndex: self.onboardingChatPageIndex)
+    }
+
+    static func shouldUseCompactHero(activePageIndex: Int, onboardingChatPageIndex: Int) -> Bool {
+        activePageIndex == onboardingChatPageIndex
     }
 
     var heroFrameHeight: CGFloat {

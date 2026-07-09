@@ -53,6 +53,15 @@ struct OnboardingViewSmokeTests {
         #expect(!order.contains(2))
     }
 
+    @Test func `only full page chat uses compact hero`() {
+        #expect(!OnboardingView.shouldUseCompactHero(
+            activePageIndex: 3,
+            onboardingChatPageIndex: 8))
+        #expect(OnboardingView.shouldUseCompactHero(
+            activePageIndex: 8,
+            onboardingChatPageIndex: 8))
+    }
+
     @Test func `fresh onboarding defaults to this Mac`() {
         let state = AppState(preview: true)
         state.onboardingSeen = false
