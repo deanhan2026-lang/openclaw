@@ -97,7 +97,6 @@ describe("signalMessageActions", () => {
           to: "+15551234567",
           message: "threaded",
           replyTo: "explicit-1",
-          replyToId: "alias-1",
         },
       },
       to: "+15551234567",
@@ -105,6 +104,29 @@ describe("signalMessageActions", () => {
       replyToId: "explicit-1",
     });
     expect(prepared).toBeNull();
+  });
+
+  it("prefers Signal replyToId aliases over canonical replyTo fields", () => {
+    const prepared = signalMessageActions.prepareSendPayload?.({
+      ctx: {
+        channel: "signal",
+        action: "send",
+        cfg: {} as OpenClawConfig,
+        params: {
+          to: "+15551234567",
+          message: "threaded",
+          replyTo: "explicit-1",
+          replyToId: "alias-1",
+        },
+      },
+      to: "+15551234567",
+      payload: { text: "threaded" },
+      replyToId: "explicit-1",
+    });
+    expect(prepared).toMatchObject({
+      text: "threaded",
+      replyToId: "alias-1",
+    });
   });
 
   it("lets Signal replyToId aliases override ambient core reply targets", () => {
