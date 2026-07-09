@@ -17947,7 +17947,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 458,
+      "line": 511,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Looking for AI you already use…",
       "surface": "apple",
@@ -17955,7 +17955,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 460,
+      "line": 513,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Checking for Claude Code, Codex, Gemini, and saved API keys.",
       "surface": "apple",
@@ -17963,7 +17963,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 490,
+      "line": 543,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Couldn’t check this Mac for AI accounts",
       "surface": "apple",
@@ -17971,7 +17971,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 502,
+      "line": 555,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Couldn’t load the full provider list",
       "surface": "apple",
@@ -17979,7 +17979,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 505,
+      "line": 558,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Try again",
       "surface": "apple",
@@ -17987,7 +17987,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 513,
+      "line": 566,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "None of the found options worked",
       "surface": "apple",
@@ -17995,7 +17995,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 514,
+      "line": 567,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "The details are listed on each option above. You can fix the login and retry, or connect with an API key or token below.",
       "surface": "apple",
@@ -18003,7 +18003,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 532,
+      "line": 585,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Need help? Chat with Crestodian",
       "surface": "apple",
@@ -18011,7 +18011,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 546,
+      "line": 599,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Your AI is ready",
       "surface": "apple",
@@ -18019,7 +18019,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 563,
+      "line": 616,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "No AI accounts found on this Mac",
       "surface": "apple",
@@ -18027,7 +18027,7 @@
     },
     {
       "kind": "ui-call-concatenated",
-      "line": 565,
+      "line": 618,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "That’s fine — you can connect one with an API key or token. If you use Claude Code, Codex, or the Gemini CLI on this Mac, sign in there first and hit “Check again”.",
       "surface": "apple",
@@ -18035,7 +18035,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 598,
+      "line": 651,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Recommended",
       "surface": "apple",
@@ -18043,7 +18043,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 695,
+      "line": 748,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "No key-based providers are available",
       "surface": "apple",
@@ -18051,7 +18051,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 696,
+      "line": 749,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Enable or install a text-inference provider plugin on this Gateway, then check again.",
       "surface": "apple",
@@ -18059,7 +18059,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 698,
+      "line": 751,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Check again",
       "surface": "apple",
@@ -18067,7 +18067,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 710,
+      "line": 763,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Connect with an API key or token instead…",
       "surface": "apple",
@@ -18075,7 +18075,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 721,
+      "line": 774,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Connect with an API key or token",
       "surface": "apple",
@@ -18083,7 +18083,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 724,
+      "line": 777,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Provider",
       "surface": "apple",
@@ -18091,7 +18091,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 732,
+      "line": 785,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "API key or token",
       "surface": "apple",
@@ -18099,7 +18099,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 744,
+      "line": 797,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Connect",
       "surface": "apple",
@@ -18107,7 +18107,7 @@
     },
     {
       "kind": "ui-named-argument",
-      "line": 757,
+      "line": 810,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "That key didn’t work",
       "surface": "apple",
@@ -18115,7 +18115,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 783,
+      "line": 836,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Crestodian — setup helper",
       "surface": "apple",
@@ -18123,7 +18123,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 786,
+      "line": 839,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Done",
       "surface": "apple",
@@ -18131,7 +18131,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 847,
+      "line": 900,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Open help…",
       "surface": "apple",
@@ -18139,7 +18139,7 @@
     },
     {
       "kind": "conditional-branch",
-      "line": 886,
+      "line": 939,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Hide details",
       "surface": "apple",
@@ -18147,7 +18147,7 @@
     },
     {
       "kind": "conditional-branch",
-      "line": 886,
+      "line": 939,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Show details",
       "surface": "apple",
@@ -18155,7 +18155,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 906,
+      "line": 959,
       "path": "apps/macos/Sources/OpenClaw/OnboardingAISetup.swift",
       "source": "Copy error",
       "surface": "apple",
@@ -18163,7 +18163,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 126,
+      "line": 138,
       "path": "apps/macos/Sources/OpenClaw/OnboardingCrestodianChat.swift",
       "source": "Crestodian is working…",
       "surface": "apple",
@@ -18171,7 +18171,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 151,
+      "line": 163,
       "path": "apps/macos/Sources/OpenClaw/OnboardingCrestodianChat.swift",
       "source": "Restart",
       "surface": "apple",
@@ -18179,7 +18179,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 162,
+      "line": 174,
       "path": "apps/macos/Sources/OpenClaw/OnboardingCrestodianChat.swift",
       "source": "Enter secret…",
       "surface": "apple",
@@ -18187,7 +18187,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 164,
+      "line": 176,
       "path": "apps/macos/Sources/OpenClaw/OnboardingCrestodianChat.swift",
       "source": "Reply to Crestodian… (yes sets everything up)",
       "surface": "apple",
@@ -18203,7 +18203,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 115,
+      "line": 122,
       "path": "apps/macos/Sources/OpenClaw/OnboardingView+Layout.swift",
       "source": "Back",
       "surface": "apple",
