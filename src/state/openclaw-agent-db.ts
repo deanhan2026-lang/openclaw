@@ -12,6 +12,7 @@ import { resolveSqliteDatabaseFilePaths } from "../infra/sqlite-files.js";
 import {
   runSqliteImmediateTransactionAsync,
   runSqliteImmediateTransactionSync,
+  type SqliteTransactionOptions,
 } from "../infra/sqlite-transaction.js";
 import { readSqliteUserVersion } from "../infra/sqlite-user-version.js";
 import {
@@ -602,12 +603,17 @@ export function openOpenClawAgentDatabase(
 export function runOpenClawAgentWriteTransaction<T>(
   operation: (database: OpenClawAgentDatabase) => T,
   options: OpenClawAgentDatabaseOptions,
+  transactionOptions: Pick<
+    SqliteTransactionOptions,
+    "operationLabel" | "slowTransactionHoldMs"
+  > = {},
 ): T {
   const database = openOpenClawAgentDatabase(options);
   const result = runSqliteImmediateTransactionSync(database.db, () => operation(database), {
     busyTimeoutMs: OPENCLAW_SQLITE_BUSY_TIMEOUT_MS,
     databaseLabel: database.path,
     maxBusyWaitMs: OPENCLAW_SQLITE_TRANSACTION_BUSY_WAIT_MS,
+    ...transactionOptions,
   });
   ensureOpenClawAgentDatabasePermissions(database.path, options);
   return result;
@@ -617,6 +623,10 @@ export function runOpenClawAgentWriteTransaction<T>(
 export async function runOpenClawAgentWriteTransactionAsync<T>(
   operation: (database: OpenClawAgentDatabase) => Promise<T> | T,
   options: OpenClawAgentDatabaseOptions,
+  transactionOptions: Pick<
+    SqliteTransactionOptions,
+    "operationLabel" | "slowTransactionHoldMs"
+  > = {},
 ): Promise<T> {
   const database = openOpenClawAgentDatabase(options);
   // Async session-entry callbacks derive their patch from the fresh row; keep
@@ -628,6 +638,7 @@ export async function runOpenClawAgentWriteTransactionAsync<T>(
       busyTimeoutMs: OPENCLAW_SQLITE_BUSY_TIMEOUT_MS,
       databaseLabel: database.path,
       maxBusyWaitMs: OPENCLAW_SQLITE_TRANSACTION_BUSY_WAIT_MS,
+      ...transactionOptions,
     },
   );
   ensureOpenClawAgentDatabasePermissions(database.path, options);

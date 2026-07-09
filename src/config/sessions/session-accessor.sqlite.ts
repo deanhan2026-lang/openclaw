@@ -447,7 +447,9 @@ export async function patchSqliteSessionEntry(
         }),
       );
       return cloneSessionEntry(next);
-    }, toDatabaseOptions(resolved));
+    }, toDatabaseOptions(resolved), {
+      operationLabel: "session-entry.patch",
+    });
     finalizeSqliteSessionEntryMaintenancePlansBestEffort(resolved, maintenancePlans);
     return result;
   });
@@ -500,7 +502,9 @@ export async function patchSqliteSessionEntryTarget(
         }),
       );
       return cloneSessionEntry(next);
-    }, toDatabaseOptions(resolved));
+    }, toDatabaseOptions(resolved), {
+      operationLabel: "session-entry-target.patch",
+    });
     finalizeSqliteSessionEntryMaintenancePlansBestEffort(resolved, maintenancePlans);
     return result;
   });
@@ -763,7 +767,9 @@ export async function updateSqliteSessionEntry(
         }),
       );
       return cloneSessionEntry(next);
-    }, toDatabaseOptions(resolved));
+    }, toDatabaseOptions(resolved), {
+      operationLabel: "session-entry.update",
+    });
     finalizeSqliteSessionEntryMaintenancePlansBestEffort(resolved, maintenancePlans);
     return result;
   });
@@ -961,13 +967,17 @@ export async function applySqliteSessionEntryLifecycleMutation(params: {
       removals: [],
       upsertedEntries: [],
     };
-    await runOpenClawAgentWriteTransactionAsync(async (database) => {
-      projected = await projectSqliteSessionEntryLifecycleMutation(database, {
-        archiveDirectory: resolveSqliteTranscriptArchiveDirectory(resolved),
-        removals,
-        upserts,
-      });
-    }, toDatabaseOptions(resolved));
+    await runOpenClawAgentWriteTransactionAsync(
+      async (database) => {
+        projected = await projectSqliteSessionEntryLifecycleMutation(database, {
+          archiveDirectory: resolveSqliteTranscriptArchiveDirectory(resolved),
+          removals,
+          upserts,
+        });
+      },
+      toDatabaseOptions(resolved),
+      { operationLabel: "session-lifecycle.project" },
+    );
     let materializedRemovalPlans: MaterializedSqliteSessionStateDeletePlan[] = [];
     try {
       materializedRemovalPlans = materializeSqliteSessionStateDeletePlans(projected.deletePlans);
@@ -1010,7 +1020,9 @@ export async function applySqliteSessionEntryLifecycleMutation(params: {
         transactionDb,
         materializedRemovalPlans,
       );
-    }, toDatabaseOptions(resolved));
+    }, toDatabaseOptions(resolved), {
+      operationLabel: "session-lifecycle.apply",
+    });
     const maintenanceArchivedTranscripts = finalizeSqliteSessionEntryMaintenancePlansBestEffort(
       resolved,
       maintenancePlans,
@@ -1609,7 +1621,9 @@ export async function appendSqliteExpectedSessionTranscriptTurn(
         sessionEntry: cloneSessionEntry(next),
         sessionFile: options.sessionFile,
       };
-    }, toDatabaseOptions(resolved));
+    }, toDatabaseOptions(resolved), {
+      operationLabel: "session-transcript.append-expected-turn",
+    });
   });
 }
 

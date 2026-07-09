@@ -758,7 +758,11 @@ export async function updateAuthProfileStoreWithLock(params: {
       }
       return store;
     });
-  } catch {
+  } catch (error) {
+    log.warn("auth profile store update failed", {
+      agentDir: params.agentDir,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 }

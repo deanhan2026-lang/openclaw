@@ -10,6 +10,7 @@ const RETRYABLE_SQLITE_LOCK_ERROR_CODES = new Set(["SQLITE_BUSY", "SQLITE_LOCKED
 const MAX_TRANSACTION_LOCK_ATTEMPTS = 8;
 const DEFAULT_MAX_BUSY_WAIT_MS = 30_000;
 const DEFAULT_SLOW_BUSY_WAIT_MS = 1_000;
+const DEFAULT_SLOW_TRANSACTION_HOLD_MS = 1_000;
 
 let nextSavepointId = 0;
 const transactionLog = createSubsystemLogger("sqlite/transaction");
@@ -19,6 +20,8 @@ export type SqliteTransactionOptions = {
   databaseLabel?: string;
   logger?: Pick<SubsystemLogger, "warn">;
   maxBusyWaitMs?: number;
+  operationLabel?: string;
+  slowTransactionHoldMs?: number;
 };
 
 type SqliteTransactionStep = "begin" | "commit";
@@ -81,10 +84,31 @@ function slowBusyWaitThresholdMs(options: SqliteTransactionOptions | undefined):
   return Math.min(DEFAULT_SLOW_BUSY_WAIT_MS, Math.max(1, options.busyTimeoutMs));
 }
 
+function slowTransactionHoldThresholdMs(options: SqliteTransactionOptions | undefined): number {
+  return options?.slowTransactionHoldMs ?? DEFAULT_SLOW_TRANSACTION_HOLD_MS;
+}
+
 function transactionLogger(
   options: SqliteTransactionOptions | undefined,
 ): Pick<SubsystemLogger, "warn"> {
   return options?.logger ?? transactionLog;
+}
+
+function logSlowTransactionHold(params: {
+  async: boolean;
+  elapsedMs: number;
+  options?: SqliteTransactionOptions;
+}): void {
+  if (params.elapsedMs < slowTransactionHoldThresholdMs(params.options)) {
+    return;
+  }
+  transactionLogger(params.options).warn("slow SQLite transaction hold", {
+    async: params.async,
+    ...(params.options?.databaseLabel ? { database: params.options.databaseLabel } : {}),
+    elapsedMs: params.elapsedMs,
+    ...(params.options?.operationLabel ? { operation: params.options.operationLabel } : {}),
+    thresholdMs: slowTransactionHoldThresholdMs(params.options),
+  });
 }
 
 function logSlowTransactionStep(params: {
@@ -291,6 +315,7 @@ export function runSqliteImmediateTransactionSync<T>(
   setTransactionDepth(db, 1);
   let transactionStillActive = true;
   let result: T;
+  const transactionStartedAt = Date.now();
   try {
     result = operation();
     assertSyncTransactionResult(result);
@@ -309,6 +334,11 @@ export function runSqliteImmediateTransactionSync<T>(
   }
 
   try {
+    logSlowTransactionHold({
+      async: false,
+      elapsedMs: Date.now() - transactionStartedAt,
+      options,
+    });
     commitImmediateTransaction(db, options);
     transactionStillActive = false;
     return result;
@@ -357,6 +387,7 @@ export async function runSqliteImmediateTransactionAsync<T>(
   beginImmediateTransaction(db, options);
   let transactionStillActive = true;
   let result: T;
+  const transactionStartedAt = Date.now();
   const parentContext = transactionContext.getStore();
   const transactionDepths = new Map(parentContext?.depths);
   transactionDepths.set(db, 1);
@@ -379,6 +410,11 @@ export async function runSqliteImmediateTransactionAsync<T>(
   }
 
   try {
+    logSlowTransactionHold({
+      async: true,
+      elapsedMs: Date.now() - transactionStartedAt,
+      options,
+    });
     commitImmediateTransaction(db, options);
     transactionStillActive = false;
     return result;

@@ -291,6 +291,35 @@ describe("runSqliteImmediateTransactionAsync", () => {
     expect(execCalls).toEqual(["BEGIN IMMEDIATE", "COMMIT", "COMMIT"]);
   });
 
+  it("logs slow async transaction holds with operation labels", async () => {
+    const logger = { warn: vi.fn() };
+    const db = createDatabase();
+
+    await runSqliteImmediateTransactionAsync(
+      db,
+      async () => {
+        db.prepare("INSERT INTO entries(id, value) VALUES (?, ?)").run("async", "kept");
+      },
+      {
+        databaseLabel: "agent.sqlite",
+        logger,
+        operationLabel: "session-transcript.append-expected-turn",
+        slowTransactionHoldMs: 0,
+      },
+    );
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "slow SQLite transaction hold",
+      expect.objectContaining({
+        async: true,
+        database: "agent.sqlite",
+        operation: "session-transcript.append-expected-turn",
+        thresholdMs: 0,
+      }),
+    );
+    expect(readEntries(db)).toEqual(["async"]);
+  });
+
   it("does not treat unrelated same-handle writes as nested savepoints", async () => {
     const db = createDatabase();
     let releaseOuter: (() => void) | undefined;
