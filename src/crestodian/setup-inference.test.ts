@@ -173,9 +173,10 @@ describe("activateSetupInference", () => {
   });
 
   it("does not touch config when the live test fails", async () => {
+    const providerSecret = "gsk_abcdefghijklmnop";
     const applySetup = vi.fn(async () => ({ configPath: "/tmp/openclaw.json", lines: [] }));
     const runCliAgent = vi.fn(async () => {
-      throw new Error("401 invalid_api_key");
+      throw new Error(`401 invalid_api_key ${providerSecret}`);
     });
     const result = await activateSetupInference({
       kind: "claude-cli",
@@ -190,6 +191,7 @@ describe("activateSetupInference", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain("invalid_api_key");
+      expect(result.error).not.toContain(providerSecret);
     }
     expect(applySetup).not.toHaveBeenCalled();
   });
@@ -537,7 +539,7 @@ describe("activateSetupInference", () => {
           }),
           resolveAgentDir: () => agentDir,
           runEmbeddedAgent: vi.fn(async () => {
-            throw new Error("401 invalid_api_key");
+            throw new Error("401 rejected credential bad-groq-key");
           }) as never,
           applySetup: vi.fn() as never,
           updateConfig: vi.fn() as never,
@@ -546,6 +548,10 @@ describe("activateSetupInference", () => {
       });
 
       expect(result).toMatchObject({ ok: false, status: "auth" });
+      if (!result.ok) {
+        expect(result.error).toContain("401 rejected credential [redacted]");
+        expect(result.error).not.toContain("bad-groq-key");
+      }
       expect(readAuthProfileStoreForTest(agentDir).profiles["groq:default"]).toBeUndefined();
     } finally {
       await removeOAuthTestTempRoot(stateDir);

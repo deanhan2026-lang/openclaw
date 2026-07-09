@@ -551,6 +551,24 @@ async function runProviderManualSecretMethod(params: {
 export async function activateSetupInference(
   params: ActivateSetupInferenceParams,
 ): Promise<ActivateSetupInferenceResult> {
+  try {
+    const result = await activateSetupInferenceUnredacted(params);
+    if (result.ok) {
+      return result;
+    }
+    return {
+      ...result,
+      error: await redactSetupInferenceError(result.error, params.apiKey),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(await redactSetupInferenceError(message, params.apiKey));
+  }
+}
+
+async function activateSetupInferenceUnredacted(
+  params: ActivateSetupInferenceParams,
+): Promise<ActivateSetupInferenceResult> {
   const deps = params.deps ?? {};
   const readSnapshot =
     deps.readConfigFileSnapshot ?? (await import("../config/config.js")).readConfigFileSnapshot;
@@ -673,6 +691,18 @@ export async function activateSetupInference(
   }
 }
 
+async function redactSetupInferenceError(message: string, apiKey?: string): Promise<string> {
+  const secrets = new Set(
+    [apiKey, apiKey?.trim()].filter((value): value is string => Boolean(value)),
+  );
+  let redacted = message;
+  for (const secret of Array.from(secrets).toSorted((a, b) => b.length - a.length)) {
+    redacted = redacted.split(secret).join("[redacted]");
+  }
+  const { redactToolPayloadText } = await import("../logging/redact.js");
+  return redactToolPayloadText(redacted);
+}
+
 function applyManualAuthConfig(
   config: OpenClawConfig,
   manualAuth: NonNullable<SetupInferenceTestPlan["manualAuth"]>,
@@ -789,11 +819,10 @@ async function runSetupInferenceTest(params: {
     return { ok: true, latencyMs: Date.now() - started };
   } catch (error) {
     const described = describeFailoverError(error);
-    const { redactSecrets } = await import("../commands/status-all/format.js");
     return {
       ok: false,
       status: mapFailoverReasonToSetupStatus(described.reason),
-      error: redactSecrets(described.message),
+      error: described.message,
     };
   }
 }
