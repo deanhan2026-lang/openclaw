@@ -3,15 +3,21 @@ import type { Block, KnownBlock } from "@slack/web-api";
 import { parseExecApprovalCommandText } from "openclaw/plugin-sdk/approval-reply-runtime";
 import {
   reduceInteractiveReply,
+  renderMessagePresentationChartFallbackText,
   resolveMessagePresentationControlValue,
 } from "openclaw/plugin-sdk/interactive-runtime";
 import type {
   InteractiveReply,
   MessagePresentation,
   MessagePresentationButtonsBlock,
+  MessagePresentationChartBlock,
   MessagePresentationSelectBlock,
 } from "openclaw/plugin-sdk/interactive-runtime";
 import { normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
+import {
+  buildSlackDataVisualizationBlock,
+  canRenderSlackDataVisualization,
+} from "./data-visualization.js";
 import {
   SLACK_ACTION_BLOCK_ELEMENTS_MAX,
   SLACK_ACTION_LABEL_MAX,
@@ -287,6 +293,26 @@ export function buildSlackPresentationBlocks(
       }
       continue;
     }
+    if (block.type === "chart") {
+      const rendered = buildSlackPresentationChartBlock(block);
+      if (rendered) {
+        blocks.push(rendered);
+      } else {
+        blocks.push({
+          type: "context",
+          elements: [
+            {
+              type: "mrkdwn",
+              text: truncateSlackText(
+                renderMessagePresentationChartFallbackText(block),
+                SLACK_SECTION_TEXT_MAX,
+              ),
+            },
+          ],
+        });
+      }
+      continue;
+    }
     if (block.type === "select") {
       const rendered = buildSlackPresentationSelectBlock(block, selectIndex + 1);
       if (rendered) {
@@ -296,6 +322,12 @@ export function buildSlackPresentationBlocks(
     }
   }
   return blocks;
+}
+
+function buildSlackPresentationChartBlock(
+  block: MessagePresentationChartBlock,
+): SlackBlock | undefined {
+  return buildSlackDataVisualizationBlock(block);
 }
 
 function buildSlackPresentationButtonBlock(
@@ -374,6 +406,9 @@ export function canRenderSlackPresentation(presentation: MessagePresentation): b
           }),
         )
       );
+    }
+    if (block.type === "chart") {
+      return canRenderSlackDataVisualization(block);
     }
     return true;
   });

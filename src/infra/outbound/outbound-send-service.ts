@@ -7,10 +7,15 @@ import { dispatchChannelMessageAction } from "../../channels/plugins/message-act
 import type {
   ChannelId,
   ChannelMessageActionContext,
+  ChannelOutboundAdapter,
   ChannelThreadingToolContext,
 } from "../../channels/plugins/types.public.js";
 import { appendAssistantMessageToSessionTranscript } from "../../config/sessions.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
+import {
+  normalizeMessagePresentation,
+  renderMessagePresentationFallbackText,
+} from "../../interactive/payload.js";
 import type { OutboundMediaAccess, OutboundMediaReadFile } from "../../media/load-options.js";
 import { resolveAgentScopedOutboundMediaAccess } from "../../media/read-capability.js";
 import { extractToolPayload } from "../../plugin-sdk/tool-payload.js";
@@ -68,6 +73,26 @@ type PluginHandledResult = {
 };
 
 type SendMessageParams = Parameters<typeof sendMessage>[0];
+
+export function materializeMessagePresentationFallback(params: {
+  payload: Pick<ReplyPayload, "presentation" | "text">;
+  text?: string;
+}): string {
+  const presentation = normalizeMessagePresentation(params.payload.presentation);
+  const text = (params.text ?? params.payload.text ?? "").trim();
+  if (!presentation) {
+    return text;
+  }
+  const fallback = renderMessagePresentationFallbackText({ presentation });
+  if (!fallback || text.includes(fallback)) {
+    return text;
+  }
+  return [text, fallback].filter(Boolean).join("\n\n");
+}
+
+export function hasCorePresentationDelivery(outbound?: ChannelOutboundAdapter): boolean {
+  return Boolean(outbound?.sendPayload || outbound?.sendText || outbound?.sendFormattedText);
+}
 
 async function sendCoreMessage(params: {
   ctx: OutboundSendContext;
@@ -265,13 +290,32 @@ export async function executeSendAction(params: {
     replyToId: params.replyToId,
     threadId: params.threadId,
   });
-  if (preparedPayload) {
+  const channelPlugin = resolveOutboundChannelPlugin({
+    channel: params.ctx.channel,
+    cfg: params.ctx.cfg,
+  });
+  const presentation = normalizeMessagePresentation(defaultPayload.presentation);
+  const corePayload =
+    preparedPayload ??
+    (presentation && hasCorePresentationDelivery(channelPlugin?.outbound) ? defaultPayload : null);
+  if (corePayload) {
     throwIfAborted(params.ctx.abortSignal);
-    // Prepared plugin payloads still use core delivery so queueing, hooks, and mirrors stay uniform.
+    const corePresentation = normalizeMessagePresentation(corePayload.presentation);
+    const message =
+      corePresentation && channelPlugin?.outbound?.deliveryMode === "gateway"
+        ? materializeMessagePresentationFallback({
+            payload: corePayload,
+            text: params.message,
+          })
+        : params.message;
+    // Prepared payloads and portable presentations need core delivery so queueing,
+    // presentation rendering/adaptation, hooks, and mirrors stay uniform. The legacy
+    // gateway `send` method accepts text/media only, so materialize its fallback here.
     const result = await sendCoreMessage({
       ...params,
+      message,
       queuePolicy,
-      payloads: [preparedPayload],
+      payloads: [corePayload],
     });
 
     return {
@@ -281,14 +325,24 @@ export async function executeSendAction(params: {
     };
   }
 
+  const pluginMessage = presentation
+    ? materializeMessagePresentationFallback({ payload: defaultPayload, text: params.message })
+    : params.message;
+  const pluginCtx =
+    pluginMessage === params.message
+      ? params.ctx
+      : {
+          ...params.ctx,
+          params: { ...params.ctx.params, message: pluginMessage },
+        };
   const pluginHandled = await tryHandleWithPluginAction({
-    ctx: params.ctx,
+    ctx: pluginCtx,
     action: "send",
     onHandled: async () => {
       if (!params.ctx.mirror) {
         return;
       }
-      const mirrorText = params.ctx.mirror.text ?? params.message;
+      const mirrorText = params.ctx.mirror.text ?? pluginMessage;
       const mirrorMediaUrls =
         params.ctx.mirror.mediaUrls ??
         params.mediaUrls ??

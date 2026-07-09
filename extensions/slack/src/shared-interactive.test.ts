@@ -428,6 +428,28 @@ describe("buildSlackPresentationBlocks", () => {
       },
     ]);
   });
+
+  it("renders Slack-incompatible charts as visible text", () => {
+    const title = "A".repeat(51);
+
+    expect(
+      buildSlackPresentationBlocks({
+        blocks: [
+          {
+            type: "chart",
+            chartType: "pie",
+            title,
+            segments: [{ label: "Product", value: 60 }],
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        type: "context",
+        elements: [{ type: "mrkdwn", text: `${title} (pie chart)\n- Product: 60` }],
+      },
+    ]);
+  });
 });
 
 describe("resolveSlackReplyBlocks", () => {

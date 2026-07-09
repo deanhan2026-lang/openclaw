@@ -94,7 +94,12 @@ import {
   resolveEffectiveMessageToolsConfig,
   shouldApplyCrossContextMarker,
 } from "./outbound-policy.js";
-import { executePollAction, executeSendAction } from "./outbound-send-service.js";
+import {
+  executePollAction,
+  executeSendAction,
+  hasCorePresentationDelivery,
+  materializeMessagePresentationFallback,
+} from "./outbound-send-service.js";
 import { ensureOutboundSessionEntry, resolveOutboundSessionRoute } from "./outbound-session.js";
 import { normalizeTargetForProvider } from "./target-normalization.js";
 import { resolveChannelTarget, type ResolvedMessagingTarget } from "./target-resolver.js";
@@ -1177,26 +1182,45 @@ async function handleSendAction(ctx: ResolvedActionContext): Promise<MessageActi
     requesterSenderE164: input.requesterSenderE164,
   });
 
-  const gatewayPluginAction = await runGatewayPluginMessageActionOrNull({
-    cfg,
-    params,
-    channel,
-    action,
-    accountId,
-    dryRun,
-    gateway,
-    input,
-    agentId,
-    result: (payload) => ({
-      kind: "send",
-      channel,
-      action,
-      to,
-      handledBy: "plugin",
-      payload,
-      dryRun,
-    }),
-  });
+  const useCorePresentationDelivery = Boolean(
+    sendPayload.payload.presentation &&
+    hasCorePresentationDelivery(resolveOutboundChannelPlugin({ channel, cfg })?.outbound),
+  );
+  if (sendPayload.payload.presentation && !useCorePresentationDelivery) {
+    const fallbackMessage = materializeMessagePresentationFallback({
+      payload: sendPayload.payload,
+      text: sendPayload.message,
+    });
+    sendPayload = {
+      ...sendPayload,
+      message: fallbackMessage,
+      payload: { ...sendPayload.payload, text: fallbackMessage },
+    };
+    applySendPayloadPartsToActionParams(params, sendPayload);
+  }
+
+  const gatewayPluginAction = useCorePresentationDelivery
+    ? null
+    : await runGatewayPluginMessageActionOrNull({
+        cfg,
+        params,
+        channel,
+        action,
+        accountId,
+        dryRun,
+        gateway,
+        input,
+        agentId,
+        result: (payload) => ({
+          kind: "send",
+          channel,
+          action,
+          to,
+          handledBy: "plugin",
+          payload,
+          dryRun,
+        }),
+      });
   if (gatewayPluginAction) {
     return gatewayPluginAction;
   }
