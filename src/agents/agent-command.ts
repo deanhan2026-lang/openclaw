@@ -16,7 +16,6 @@ import { formatCliCommand } from "../cli/command-format.js";
 import type { CliDeps } from "../cli/deps.types.js";
 import { getRuntimeConfig } from "../config/io.js";
 import { resolveSessionWorkStartError } from "../config/sessions/lifecycle.js";
-import { formatSqliteSessionFileMarker } from "../config/sessions/sqlite-marker.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { withLocalGatewayRequestScope } from "../gateway/local-request-context.js";
@@ -117,7 +116,7 @@ import { resolveFastModeState } from "./fast-mode.js";
 import { runAgentHarnessBeforeMessageWriteHook } from "./harness/hook-helpers.js";
 import { ensureSelectedAgentHarnessPlugin } from "./harness/runtime-plugin.js";
 import { resolveAvailableAgentHarnessPolicy } from "./harness/selection.js";
-import { prepareInternalSessionEffectsTranscript } from "./internal-session-effects.js";
+import { prepareInternalSessionEffectsSession } from "./internal-session-effects.js";
 import { AGENT_LANE_SUBAGENT } from "./lanes.js";
 import { LiveSessionModelSwitchError } from "./live-model-switch.js";
 import { loadManifestModelCatalog } from "./model-catalog.js";
@@ -141,6 +140,7 @@ import {
 } from "./model-visibility-policy.js";
 import { listOpenAIAuthProfileProvidersForAgentRuntime } from "./openai-routing.js";
 import { resolveProviderIdForAuth } from "./provider-auth-aliases.js";
+import type { AgentRunSessionTarget } from "./run-session-target.js";
 import {
   createAgentRunRestartAbortError,
   isAgentRunDirectAbortReason,
@@ -606,22 +606,23 @@ function createAgentCommandSessionWorkingCopy(params: {
   return result;
 }
 
-// SQLite-backed sessions address transcripts by marker (agent/session/store), not
-// by file path; falling back to sessionFile keeps file-backed callers working.
 function resolveInternalSessionEffectsSource(params: {
   agentId: string;
-  sessionFile?: string;
   sessionId: string;
+  sessionKey?: string;
   storePath?: string;
-}): string | undefined {
-  if (params.storePath) {
-    return formatSqliteSessionFileMarker({
-      agentId: params.agentId,
-      sessionId: params.sessionId,
-      storePath: params.storePath,
-    });
+}):
+  | Required<Pick<AgentRunSessionTarget, "agentId" | "sessionId" | "sessionKey" | "storePath">>
+  | undefined {
+  if (!params.storePath || !params.sessionKey) {
+    return undefined;
   }
-  return params.sessionFile;
+  return {
+    agentId: params.agentId,
+    sessionId: params.sessionId,
+    sessionKey: params.sessionKey,
+    storePath: params.storePath,
+  };
 }
 
 function resolveExplicitAgentCommandSessionKey(params: {
@@ -1211,43 +1212,25 @@ async function agentCommandInternal(
         const finalTextRaw = visibleTextAccumulator.finalizeRaw();
         const finalText = visibleTextAccumulator.finalize();
         try {
-          const [{ resolveAcpSessionCwd }, { resolveSessionTranscriptFile }] = await Promise.all([
-            loadAcpSessionIdentifiersRuntime(),
-            loadTranscriptResolveRuntime(),
-          ]);
+          const { resolveAcpSessionCwd } = await loadAcpSessionIdentifiersRuntime();
           const internalSource = suppressVisibleSessionEffects
             ? resolveInternalSessionEffectsSource({
                 agentId: sessionAgentId,
                 sessionId,
-                sessionFile: (
-                  await resolveSessionTranscriptFile({
-                    sessionId,
-                    sessionKey,
-                    sessionEntry,
-                    agentId: sessionAgentId,
-                    threadId: opts.threadId,
-                  })
-                ).sessionFile,
+                sessionKey,
                 storePath,
               })
             : undefined;
-          const internalSessionFile = suppressVisibleSessionEffects
-            ? await prepareInternalSessionEffectsTranscript({
-                sessionFile: internalSource,
+          const internalTarget = suppressVisibleSessionEffects
+            ? await prepareInternalSessionEffectsSession({
+                agentId: sessionAgentId,
+                cwd: resolveAcpSessionCwd(acpResolution.meta) ?? workspaceDir,
                 runId,
+                source: internalSource,
+                storePath,
               })
             : undefined;
-          const transcriptSessionEntry: SessionEntry | undefined = internalSessionFile
-            ? {
-                ...(sessionEntry ?? {
-                  sessionId,
-                  updatedAt: Date.now(),
-                  sessionStartedAt: Date.now(),
-                }),
-                sessionId,
-                sessionFile: internalSessionFile,
-              }
-            : sessionEntry;
+          const transcriptSessionEntry = internalTarget?.sessionEntry ?? sessionEntry;
           const transcriptResult = await attemptExecutionRuntime.persistAcpTurnTranscript({
             body,
             transcriptBody,
@@ -1261,19 +1244,18 @@ async function agentCommandInternal(
                 }
               : {}),
             finalText: finalTextRaw,
-            sessionId,
-            sessionKey,
+            sessionId: internalTarget?.sessionId ?? sessionId,
+            sessionKey: internalTarget?.sessionKey ?? sessionKey,
             sessionEntry: transcriptSessionEntry,
             sessionStore: suppressVisibleSessionEffects ? undefined : sessionStore,
-            storePath: suppressVisibleSessionEffects ? undefined : storePath,
-            sessionAgentId,
+            storePath: internalTarget?.storePath ?? storePath,
+            sessionAgentId: internalTarget?.agentId ?? sessionAgentId,
             threadId: opts.threadId,
             sessionCwd: resolveAcpSessionCwd(acpResolution.meta) ?? workspaceDir,
             config: cfg,
           });
-          sessionEntry = transcriptResult.sessionEntry;
-          if (internalSessionFile) {
-            sessionEntry = prepared.sessionEntry;
+          if (!internalTarget) {
+            sessionEntry = transcriptResult.sessionEntry;
           }
         } catch (error) {
           log.warn(
@@ -1859,15 +1841,19 @@ async function agentCommandInternal(
       const sessionEffectsSource = resolveInternalSessionEffectsSource({
         agentId: sessionAgentId,
         sessionId,
-        sessionFile,
+        sessionKey,
         storePath,
       });
-      const attemptSessionFile = suppressVisibleSessionEffects
-        ? await prepareInternalSessionEffectsTranscript({
-            sessionFile: sessionEffectsSource,
+      const internalSessionTarget = suppressVisibleSessionEffects
+        ? await prepareInternalSessionEffectsSession({
+            agentId: sessionAgentId,
+            cwd: cwd ?? workspaceDir,
             runId,
+            source: sessionEffectsSource,
+            storePath,
           })
-        : (sessionEffectsSource ?? sessionFile);
+        : undefined;
+      const attemptSessionFile = internalSessionTarget?.sessionFile ?? sessionFile;
 
       const startedAt = Date.now();
       const attemptLifecycleState: AgentAttemptLifecycleState = {
@@ -1897,10 +1883,12 @@ async function agentCommandInternal(
             }
           : {}),
         target: {
-          transcriptPath: attemptSessionFile,
-          sessionId,
-          agentId: sessionAgentId,
-          ...(sessionKey ? { sessionKey } : {}),
+          sessionId: internalSessionTarget?.sessionId ?? sessionId,
+          agentId: internalSessionTarget?.agentId ?? sessionAgentId,
+          sessionKey: internalSessionTarget?.sessionKey ?? sessionKey ?? sessionId,
+          sessionEntry: internalSessionTarget?.sessionEntry ?? sessionEntry,
+          sessionStore: suppressVisibleSessionEffects ? undefined : sessionStore,
+          storePath: internalSessionTarget?.storePath ?? storePath,
           cwd: cwd ?? workspaceDir,
           config: cfg,
         },
@@ -2039,18 +2027,12 @@ async function agentCommandInternal(
       let liveSwitchRetries = 0;
       let autoFallbackPrimaryProbeInterruptedByLiveSwitch = false;
       const fastModeStartedAtMs = Date.now();
-      const trajectorySessionFile = resolveInternalSessionEffectsSource({
-        agentId: sessionAgentId,
-        sessionId,
-        sessionFile,
-        storePath,
-      });
       const fallbackTrajectoryRecorder = createTrajectoryRuntimeRecorder({
         cfg,
         runId,
         sessionId,
         sessionKey,
-        sessionFile: suppressVisibleSessionEffects ? attemptSessionFile : trajectorySessionFile,
+        sessionFile: attemptSessionFile,
         provider,
         modelId: model,
         workspaceDir,
@@ -2153,6 +2135,7 @@ async function agentCommandInternal(
                 sessionEntry: attemptSessionEntry,
                 sessionId,
                 sessionKey,
+                ...(internalSessionTarget ? { sessionTarget: internalSessionTarget } : {}),
                 sessionAgentId,
                 sessionFile: attemptSessionFile,
                 workspaceDir,
@@ -2390,10 +2373,8 @@ async function agentCommandInternal(
 
         const rotatedSessionFile = result.meta.agentMeta?.sessionFile;
         const effectiveSessionId = rotatedSessionFile
-          ? (result.meta.agentMeta?.sessionId ?? sessionId)
-          : sessionId;
-        const effectiveSessionFile = rotatedSessionFile ?? attemptSessionFile;
-
+          ? (result.meta.agentMeta?.sessionId ?? internalSessionTarget?.sessionId ?? sessionId)
+          : (internalSessionTarget?.sessionId ?? sessionId);
         // Update token+model fields in the session store.
         if (sessionStore && sessionKey && !suppressVisibleSessionEffects) {
           const isHeartbeatLifecycleRun = isHeartbeatLifecycleRunKind(opts.bootstrapContextRunKind);
@@ -2435,27 +2416,17 @@ async function agentCommandInternal(
         ) {
           let persistedCliTurnTranscript = false;
           try {
-            const transcriptSessionEntry: SessionEntry | undefined = suppressVisibleSessionEffects
-              ? {
-                  ...(sessionEntry ?? {
-                    sessionId: effectiveSessionId,
-                    updatedAt: Date.now(),
-                    sessionStartedAt: Date.now(),
-                  }),
-                  sessionId: effectiveSessionId,
-                  sessionFile: effectiveSessionFile,
-                }
-              : sessionEntry;
+            const transcriptSessionEntry = internalSessionTarget?.sessionEntry ?? sessionEntry;
             const transcriptResult = await attemptExecutionRuntime.persistCliTurnTranscript({
               body,
               transcriptBody,
               result,
               sessionId: effectiveSessionId,
-              sessionKey: sessionKey ?? effectiveSessionId,
+              sessionKey: internalSessionTarget?.sessionKey ?? sessionKey ?? effectiveSessionId,
               sessionEntry: transcriptSessionEntry,
               sessionStore: suppressVisibleSessionEffects ? undefined : sessionStore,
-              storePath: suppressVisibleSessionEffects ? undefined : storePath,
-              sessionAgentId,
+              storePath: internalSessionTarget?.storePath ?? storePath,
+              sessionAgentId: internalSessionTarget?.agentId ?? sessionAgentId,
               threadId: opts.threadId,
               sessionCwd: effectiveCwd,
               config: cfg,
@@ -2465,10 +2436,9 @@ async function agentCommandInternal(
                 userTurnTranscriptRecorder.hasPersisted() ||
                 userTurnTranscriptRecorder.isBlocked(),
             });
-            sessionEntry = transcriptResult.sessionEntry;
             sessionReboundDuringRun = transcriptResult.kind === "session-rebound";
-            if (suppressVisibleSessionEffects) {
-              sessionEntry = prepared.sessionEntry;
+            if (!internalSessionTarget) {
+              sessionEntry = transcriptResult.sessionEntry;
             }
             persistedCliTurnTranscript = transcriptResult.kind === "persisted";
           } catch (error) {

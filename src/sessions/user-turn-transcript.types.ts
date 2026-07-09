@@ -38,7 +38,7 @@ export type UserTurnBeforeMessageWrite = (params: {
   sessionKey?: string;
 }) => AgentMessage | null;
 
-type UserTurnTranscriptPersistenceTarget = {
+export type UserTurnTranscriptPersistenceTarget = {
   sessionId: string;
   expectedSessionId?: string;
   sessionKey: string;
@@ -52,18 +52,7 @@ type UserTurnTranscriptPersistenceTarget = {
   beforeMessageWrite?: UserTurnBeforeMessageWrite;
 };
 
-export type UserTurnTranscriptFileTarget = {
-  transcriptPath: string;
-  sessionId?: string;
-  agentId?: string;
-  sessionKey?: string;
-  cwd?: string;
-  config?: unknown;
-};
-
-export type UserTurnTranscriptTarget =
-  | UserTurnTranscriptPersistenceTarget
-  | UserTurnTranscriptFileTarget;
+export type UserTurnTranscriptTarget = UserTurnTranscriptPersistenceTarget;
 
 export type UserTurnTranscriptPersistResult = {
   sessionFile: string;

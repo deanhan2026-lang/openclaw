@@ -602,6 +602,8 @@ export type ForkSessionFromParentTranscriptParams = {
   parentSessionKey: string;
   sessionKey: string;
   storePath: string;
+  /** Stable target identity for lifecycle-owned hidden or resumable sessions. */
+  targetSessionId?: string;
   /** Cross-agent forks land the child transcript in the target agent's store. */
   targetStorePath?: string;
 };

@@ -67,8 +67,7 @@ const state = vi.hoisted(() => ({
     resolvedSkills: [],
     version: 0,
   })),
-  prepareInternalSessionEffectsTranscriptMock: vi.fn(),
-  removeInternalSessionEffectsTranscriptMock: vi.fn(),
+  prepareInternalSessionEffectsSessionMock: vi.fn(),
   authProfileStoreMock: { profiles: {} } as { profiles: Record<string, unknown> },
   sessionEntryMock: undefined as SessionEntry | undefined,
   sessionStoreMock: undefined as unknown,
@@ -278,10 +277,8 @@ vi.mock("../config/sessions/transcript-resolve.runtime.js", () => ({
 }));
 
 vi.mock("./internal-session-effects.js", () => ({
-  prepareInternalSessionEffectsTranscript: (...args: unknown[]) =>
-    state.prepareInternalSessionEffectsTranscriptMock(...args),
-  removeInternalSessionEffectsTranscript: (...args: unknown[]) =>
-    state.removeInternalSessionEffectsTranscriptMock(...args),
+  prepareInternalSessionEffectsSession: (...args: unknown[]) =>
+    state.prepareInternalSessionEffectsSessionMock(...args),
 }));
 
 vi.mock("../infra/agent-events.js", () => ({
@@ -1112,10 +1109,14 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
     );
     state.updateSessionStoreAfterAgentRunMock.mockResolvedValue(undefined);
     state.trajectoryFlushMock.mockResolvedValue(undefined);
-    state.prepareInternalSessionEffectsTranscriptMock.mockResolvedValue(
-      "/tmp/openclaw-internal-run.jsonl",
-    );
-    state.removeInternalSessionEffectsTranscriptMock.mockResolvedValue(undefined);
+    state.prepareInternalSessionEffectsSessionMock.mockResolvedValue({
+      agentId: "default",
+      sessionId: "internal-session",
+      sessionKey: "agent:default:internal-session-effects:run",
+      storePath: "/tmp/openclaw-session-store.json",
+      sessionFile: "sqlite:default:internal-session:/tmp/openclaw-session-store.json",
+      sessionEntry: { sessionId: "internal-session", updatedAt: 1 },
+    });
   });
 
   afterEach(() => {
@@ -2759,6 +2760,7 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
     state.sessionEntryMock = visibleEntry;
     state.sessionStoreMock = sessionStore;
     state.storePathMock = "/tmp/openclaw-session-store.json";
+    state.loadSessionEntryMock.mockReturnValue(visibleEntry);
     const attemptCalls: Array<{ sessionFile?: string; sessionEntry?: SessionEntry }> = [];
     state.runAgentAttemptMock.mockImplementation(async (params) => {
       attemptCalls.push(params as { sessionFile?: string; sessionEntry?: SessionEntry });
@@ -2791,6 +2793,7 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
     state.sessionEntryMock = visibleEntry;
     state.sessionStoreMock = sessionStore;
     state.storePathMock = "/tmp/openclaw-session-store.json";
+    state.loadSessionEntryMock.mockReturnValue(visibleEntry);
     const attemptCalls: Array<{ sessionFile?: string; sessionEntry?: SessionEntry }> = [];
     state.runAgentAttemptMock.mockImplementation(async (params) => {
       attemptCalls.push(params as { sessionFile?: string; sessionEntry?: SessionEntry });
@@ -2804,16 +2807,26 @@ describe("agentCommand – LiveSessionModelSwitchError retry", () => {
       suppressPromptPersistence: true,
     });
 
-    expect(state.prepareInternalSessionEffectsTranscriptMock).toHaveBeenCalledWith({
-      sessionFile: "sqlite:default:session-1:/tmp/openclaw-session-store.json",
-      runId: expect.any(String),
+    expect(state.prepareInternalSessionEffectsSessionMock).toHaveBeenCalledWith({
+      agentId: "default",
+      cwd: "/tmp/workspace",
+      runId: "session-1",
+      source: {
+        agentId: "default",
+        sessionId: "session-1",
+        sessionKey: "agent:main:main",
+        storePath: "/tmp/openclaw-session-store.json",
+      },
+      storePath: "/tmp/openclaw-session-store.json",
     });
     expect(attemptCalls).toHaveLength(1);
-    expect(attemptCalls[0]?.sessionFile).toBe("/tmp/openclaw-internal-run.jsonl");
+    expect(attemptCalls[0]?.sessionFile).toBe(
+      "sqlite:default:internal-session:/tmp/openclaw-session-store.json",
+    );
     expect(attemptCalls[0]?.sessionEntry).toStrictEqual(visibleEntry);
     expect(state.trajectoryRecorderParamsMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        sessionFile: "/tmp/openclaw-internal-run.jsonl",
+        sessionFile: "sqlite:default:internal-session:/tmp/openclaw-session-store.json",
       }),
     );
     expect(state.persistSessionEntryMock).not.toHaveBeenCalled();

@@ -6,6 +6,7 @@
 import { uniqueStrings } from "@openclaw/normalization-core/string-normalization";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import type { cleanupBrowserSessionsForLifecycleEnd } from "../browser-lifecycle-cleanup.js";
+import { formatSqliteSessionFileMarker } from "../config/sessions/sqlite-marker.js";
 import type { callGateway as defaultCallGateway } from "../gateway/call.js";
 import { formatErrorMessage, readErrorName } from "../infra/errors.js";
 import { defaultRuntime } from "../runtime.js";
@@ -26,7 +27,7 @@ import {
   buildAnnounceIdFromChildRun,
   buildAnnounceIdempotencyKey,
 } from "./announce-idempotency.js";
-import { removeInternalSessionEffectsTranscript } from "./internal-session-effects.js";
+import { removeInternalSessionEffectsSession } from "./internal-session-effects.js";
 import type { SubagentAnnounceDeliveryResult } from "./subagent-announce-dispatch.js";
 import { type SubagentRunOutcome, withSubagentOutcomeTiming } from "./subagent-announce-output.js";
 import {
@@ -487,7 +488,13 @@ export function createSubagentRegistryLifecycleController(params: {
       const captured = await params.captureSubagentCompletionReply(entry.childSessionKey, {
         waitForReply: entry.expectsCompletionMessage === true,
         outcome,
-        sessionFile: entry.execution?.transcriptFile,
+        sessionFile: entry.execution?.transcriptTarget?.storePath
+          ? formatSqliteSessionFileMarker({
+              agentId: entry.execution.transcriptTarget.agentId ?? "",
+              sessionId: entry.execution.transcriptTarget.sessionId ?? "",
+              storePath: entry.execution.transcriptTarget.storePath,
+            })
+          : undefined,
       });
       resultText = captured?.trim() ? capFrozenResultText(captured) : null;
     } catch {
@@ -871,7 +878,7 @@ export function createSubagentRegistryLifecycleController(params: {
     provisionalKill?: boolean;
   }) => {
     if (!cleanupParams.preserveTranscript) {
-      void removeInternalSessionEffectsTranscript(cleanupParams.entry.execution?.transcriptFile);
+      void removeInternalSessionEffectsSession(cleanupParams.entry.execution?.transcriptTarget);
     }
     if (cleanupParams.entry.spawnMode !== "session") {
       void retireSessionMcpRuntimeForSessionKey({

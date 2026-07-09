@@ -8,8 +8,6 @@ import { createAbortError } from "../../infra/abort-signal.js";
 import {
   BLOCKED_TOOL_CALL_ABORT_FLOOR_MS,
   getDiagnosticSessionActivitySnapshot,
-  markDiagnosticEmbeddedRunEnded,
-  markDiagnosticEmbeddedRunStarted,
   markDiagnosticRunProgress,
 } from "../../logging/diagnostic-run-activity.js";
 import { diagnosticLogger as diag } from "../../logging/diagnostic-runtime.js";

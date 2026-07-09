@@ -5,7 +5,7 @@ import * as sessions from "../config/sessions.js";
 import * as sessionAccessor from "../config/sessions/session-accessor.js";
 import * as gateway from "../gateway/call.js";
 import * as sessionUtils from "../gateway/session-transcript-readers.js";
-import { resolveInternalSessionEffectsTranscriptPath } from "./internal-session-effects.js";
+import { resolveInternalSessionEffectsTarget } from "./internal-session-effects.js";
 import * as announceDelivery from "./subagent-announce-delivery.js";
 import {
   recoverOrphanedSubagentSessions,
@@ -229,11 +229,19 @@ describe("subagent-orphan-recovery", () => {
     expect(replaceParams.previousRunId).toBe("run-1");
     expect(replaceParams.nextRunId).toBe("test-run-id");
     expect(replaceParams.fallback).toBe(run);
-    expect(replaceParams.transcriptFile).toBe(
-      resolveInternalSessionEffectsTranscriptPath("test-run-id"),
+    expect(replaceParams.transcriptTarget).toEqual(
+      resolveInternalSessionEffectsTarget({
+        agentId: "main",
+        runId: "test-run-id",
+        storePath: "/tmp/test-sessions.json",
+      }),
     );
-    expect(replaceParams.transcriptFile).not.toBe(
-      resolveInternalSessionEffectsTranscriptPath(params.idempotencyKey as string),
+    expect(replaceParams.transcriptTarget).not.toEqual(
+      resolveInternalSessionEffectsTarget({
+        agentId: "main",
+        runId: params.idempotencyKey as string,
+        storePath: "/tmp/test-sessions.json",
+      }),
     );
   });
 

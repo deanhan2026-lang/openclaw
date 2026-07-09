@@ -309,10 +309,11 @@ export function createCronPromptExecutor(params: {
         : createUserTurnTranscriptRecorder({
             input: { text: promptText },
             target: {
-              transcriptPath: sessionFile,
               sessionId: params.cronSession.sessionEntry.sessionId,
               agentId: params.agentId,
               sessionKey: params.runSessionKey,
+              sessionEntry: params.cronSession.sessionEntry,
+              storePath: params.cronSession.storePath,
               cwd: params.workspaceDir,
               config: params.cfgWithAgentDefaults,
             },

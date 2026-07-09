@@ -38,8 +38,7 @@ type PersistedUserTurnMediaFields = {
   MediaTypes?: string[];
 };
 
-type AppendUserTurnTranscriptMessageParams = {
-  transcriptPath: string;
+type UserTurnMessagePersistenceParams = {
   input?: UserTurnInput;
   message?: PersistedUserTurnMessage;
   sessionId?: string;
@@ -286,7 +285,7 @@ export function buildPersistedUserTurnMessage(params: UserTurnInput): PersistedU
 }
 
 function resolvePersistedUserTurnMessage(
-  params: Pick<AppendUserTurnTranscriptMessageParams, "input" | "message">,
+  params: Pick<UserTurnMessagePersistenceParams, "input" | "message">,
 ): PersistedUserTurnMessage | undefined {
   if (params.message) {
     return params.message;
@@ -417,10 +416,7 @@ export function restorePreparedUserTurnOperationalMetaForRuntime(params: {
 /** Applies before-message hooks while preserving user-turn transcript metadata. */
 export function preparePersistedUserTurnMessageForTranscriptWrite(
   message: PersistedUserTurnMessage,
-  params: Pick<
-    AppendUserTurnTranscriptMessageParams,
-    "agentId" | "sessionKey" | "beforeMessageWrite"
-  >,
+  params: Pick<UserTurnMessagePersistenceParams, "agentId" | "sessionKey" | "beforeMessageWrite">,
 ): PersistedUserTurnMessage | undefined {
   if (!params.beforeMessageWrite) {
     return message;
@@ -458,62 +454,6 @@ export function preparePersistedUserTurnMessageForTranscriptWrite(
         }
       : {}),
   } as unknown as PersistedUserTurnMessage;
-}
-
-export async function appendUserTurnTranscriptMessage(
-  params: AppendUserTurnTranscriptMessageParams,
-): Promise<
-  | {
-      sessionFile: string;
-      messageId: string;
-      message: PersistedUserTurnMessage;
-    }
-  | undefined
-> {
-  const resolvedMessage = resolvePersistedUserTurnMessage(params);
-  if (!resolvedMessage) {
-    return undefined;
-  }
-
-  const turn = await persistSessionTranscriptTurn(
-    {
-      sessionFile: params.transcriptPath,
-      sessionKey: params.sessionKey ?? "",
-      ...(params.agentId ? { agentId: params.agentId } : {}),
-      ...(params.sessionId ? { sessionId: params.sessionId } : {}),
-    },
-    {
-      ...(params.cwd ? { cwd: params.cwd } : {}),
-      ...(params.config ? { config: params.config } : {}),
-      updateMode: params.updateMode ?? "inline",
-      messages: [
-        {
-          message: resolvedMessage,
-          idempotencyLookup: "scan",
-          prepareMessageAfterIdempotencyCheck: (message) =>
-            preparePersistedUserTurnMessageForTranscriptWrite(
-              message as PersistedUserTurnMessage,
-              params,
-            ),
-        },
-      ],
-    },
-  );
-  const appended = turn.messages[0] as
-    | {
-        messageId: string;
-        message: PersistedUserTurnMessage;
-      }
-    | undefined;
-  if (!appended) {
-    return undefined;
-  }
-
-  return {
-    sessionFile: params.transcriptPath,
-    messageId: appended.messageId,
-    message: appended.message,
-  };
 }
 
 // Store-backed persistence resolves the current session transcript file lazily
@@ -675,8 +615,6 @@ export function createUserTurnTranscriptRecorder(
       return undefined;
     }
     if (options.waitForRuntime) {
-      // Runtime writers may finish first, but active transcript durability is
-      // still owned by the canonical SQLite target below.
       await waitForRuntimePersistence();
     }
     if (selfPersistencePromise) {
@@ -713,7 +651,7 @@ export function createUserTurnTranscriptRecorder(
       if (lateMediaMessage) {
         // The admitted bytes already crossed the LLM boundary. Persisting media as a
         // second turn preserves that prefix; inline replacement would thrash cache tail (#99495).
-        if (!persisted && message) {
+        if (!runtimePersisted && !persisted && message) {
           const admittedResult = await persistMessage(message, updateMode);
           if (admittedResult) {
             persisted = true;
@@ -727,6 +665,9 @@ export function createUserTurnTranscriptRecorder(
           persistedResult = appendedMedia;
         }
         return appendedMedia;
+      }
+      if (runtimePersisted) {
+        return undefined;
       }
       if (persisted) {
         return persistedResult;

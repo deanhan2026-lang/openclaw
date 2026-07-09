@@ -13,7 +13,6 @@ import { runAgentHarnessBeforeMessageWriteHook } from "../agents/harness/hook-he
 import { loadTranscriptEvents } from "../config/sessions/session-accessor.js";
 import { formatSqliteSessionFileMarker } from "../config/sessions/sqlite-marker.js";
 import {
-  appendUserTurnTranscriptMessage,
   buildPersistedUserTurnMediaInputsFromFields,
   createUserTurnTranscriptRecorder,
   mergePreparedUserTurnMessageForRuntime,
@@ -24,6 +23,13 @@ import {
 
 describe("user turn transcript persistence", () => {
   const tempDirs: string[] = [];
+  const unusedRecorderTarget = {
+    agentId: "main",
+    sessionEntry: undefined,
+    sessionId: "unused-session",
+    sessionKey: "agent:main:unused",
+    storePath: "/tmp/openclaw-unused-sessions.json",
+  };
 
   afterEach(() => {
     resetGlobalHookRunner();
@@ -47,17 +53,19 @@ describe("user turn transcript persistence", () => {
     const sessionKey = params.sessionKey ?? "agent:main:main";
     const storePath = path.join(params.dir, "agents", "main", "sessions", "sessions.json");
     fs.mkdirSync(path.dirname(storePath), { recursive: true });
-    const transcriptPath = formatSqliteSessionFileMarker({
+    const sqliteMarker = formatSqliteSessionFileMarker({
       agentId: "main",
       sessionId,
       storePath,
     });
     return {
       agentId: "main",
+      cwd: params.dir,
+      sessionEntry: undefined,
       sessionId,
       sessionKey,
       storePath,
-      transcriptPath,
+      sqliteMarker,
     };
   }
 
@@ -212,7 +220,7 @@ describe("user turn transcript persistence", () => {
           media: [{ path: "/tmp/image.png", contentType: "image/png" }],
           timestamp: 123,
         },
-        target: { transcriptPath: "/tmp/session.jsonl" },
+        target: unusedRecorderTarget,
       });
 
       expect(
@@ -240,7 +248,7 @@ describe("user turn transcript persistence", () => {
           text: "group prompt",
           sender: { id: "user-42", name: "Ada" },
         },
-        target: { transcriptPath: "/tmp/session.jsonl" },
+        target: unusedRecorderTarget,
       });
 
       expect(
@@ -264,7 +272,7 @@ describe("user turn transcript persistence", () => {
     it("does not replace blocked before_agent_run user markers", () => {
       const recorder = createUserTurnTranscriptRecorder({
         input: { text: "raw prompt" },
-        target: { transcriptPath: "/tmp/session.jsonl" },
+        target: unusedRecorderTarget,
       });
       const blocked = castAgentMessage({
         role: "user",
@@ -283,7 +291,7 @@ describe("user turn transcript persistence", () => {
     it("preserves runtime multimodal content while merging prepared metadata", () => {
       const recorder = createUserTurnTranscriptRecorder({
         input: { text: "canonical image caption", timestamp: 123 },
-        target: { transcriptPath: "/tmp/session.jsonl" },
+        target: unusedRecorderTarget,
       });
       const runtimeContent = [
         { type: "text", text: "canonical image caption" },
@@ -308,7 +316,7 @@ describe("user turn transcript persistence", () => {
     it("does not apply prepared user metadata to assistant messages", () => {
       const recorder = createUserTurnTranscriptRecorder({
         input: { text: "display prompt" },
-        target: { transcriptPath: "/tmp/session.jsonl" },
+        target: unusedRecorderTarget,
       });
       const assistant = castAgentMessage({ role: "assistant", content: "hello" });
 
@@ -338,7 +346,7 @@ describe("user turn transcript persistence", () => {
     });
   });
 
-  describe("appendUserTurnTranscriptMessage", () => {
+  describe("persistUserTurnTranscript", () => {
     it("appends a structured user turn through the shared transcript writer", async () => {
       const dir = createTempDir("openclaw-user-turn-append-");
       const target = createSqliteTranscriptTarget({ dir });
@@ -348,12 +356,8 @@ describe("user turn transcript persistence", () => {
         sourceTool: "sessions_send",
       };
 
-      const appended = await appendUserTurnTranscriptMessage({
-        transcriptPath: target.transcriptPath,
-        sessionId: target.sessionId,
-        sessionKey: target.sessionKey,
-        agentId: target.agentId,
-        cwd: dir,
+      const appended = await persistUserTurnTranscript({
+        ...target,
         input: {
           text: "What is in this image?",
           media: [{ path: "/tmp/image.png", contentType: "image/png" }],
@@ -385,12 +389,8 @@ describe("user turn transcript persistence", () => {
       const dir = createTempDir("openclaw-user-turn-append-sender-");
       const target = createSqliteTranscriptTarget({ dir });
 
-      const appended = await appendUserTurnTranscriptMessage({
-        transcriptPath: target.transcriptPath,
-        sessionId: target.sessionId,
-        sessionKey: target.sessionKey,
-        agentId: target.agentId,
-        cwd: dir,
+      const appended = await persistUserTurnTranscript({
+        ...target,
         input: {
           text: "hello from group",
           sender: {
@@ -426,13 +426,10 @@ describe("user turn transcript persistence", () => {
 
     it("omits __openclaw when no sender metadata is provided", async () => {
       const dir = createTempDir("openclaw-user-turn-append-nosender-");
-      const transcriptPath = path.join(dir, "session.jsonl");
+      const target = createSqliteTranscriptTarget({ dir });
 
-      const appended = await appendUserTurnTranscriptMessage({
-        transcriptPath,
-        sessionId: "session-1",
-        sessionKey: "main",
-        cwd: dir,
+      const appended = await persistUserTurnTranscript({
+        ...target,
         input: {
           text: "hello without sender",
           sender: { id: "", name: null },
@@ -447,12 +444,8 @@ describe("user turn transcript persistence", () => {
       const dir = createTempDir("openclaw-user-turn-append-inline-");
       const target = createSqliteTranscriptTarget({ dir });
 
-      const appended = await appendUserTurnTranscriptMessage({
-        transcriptPath: target.transcriptPath,
-        sessionId: target.sessionId,
-        sessionKey: target.sessionKey,
-        agentId: target.agentId,
-        cwd: dir,
+      const appended = await persistUserTurnTranscript({
+        ...target,
         input: {
           text: "hello from runtime",
         },
@@ -476,12 +469,8 @@ describe("user turn transcript persistence", () => {
       const dir = createTempDir("openclaw-user-turn-append-idempotent-");
       const target = createSqliteTranscriptTarget({ dir });
 
-      const first = await appendUserTurnTranscriptMessage({
-        transcriptPath: target.transcriptPath,
-        sessionId: target.sessionId,
-        sessionKey: target.sessionKey,
-        agentId: target.agentId,
-        cwd: dir,
+      const first = await persistUserTurnTranscript({
+        ...target,
         input: {
           text: "hello once",
           timestamp: 123,
@@ -489,12 +478,8 @@ describe("user turn transcript persistence", () => {
         },
         updateMode: "none",
       });
-      const second = await appendUserTurnTranscriptMessage({
-        transcriptPath: target.transcriptPath,
-        sessionId: target.sessionId,
-        sessionKey: target.sessionKey,
-        agentId: target.agentId,
-        cwd: dir,
+      const second = await persistUserTurnTranscript({
+        ...target,
         input: {
           text: "hello once replayed",
           timestamp: 456,
@@ -547,11 +532,8 @@ describe("user turn transcript persistence", () => {
       const dir = createTempDir("openclaw-user-turn-redacted-idempotent-");
       const target = createSqliteTranscriptTarget({ dir });
 
-      await appendUserTurnTranscriptMessage({
-        transcriptPath: target.transcriptPath,
-        sessionId: target.sessionId,
-        sessionKey: target.sessionKey,
-        agentId: target.agentId,
+      await persistUserTurnTranscript({
+        ...target,
         input: {
           text: "secret prompt",
           idempotencyKey: "chat-run-1:user",
@@ -561,11 +543,8 @@ describe("user turn transcript persistence", () => {
         },
         beforeMessageWrite: runAgentHarnessBeforeMessageWriteHook,
       });
-      await appendUserTurnTranscriptMessage({
-        transcriptPath: target.transcriptPath,
-        sessionId: target.sessionId,
-        sessionKey: target.sessionKey,
-        agentId: target.agentId,
+      await persistUserTurnTranscript({
+        ...target,
         input: {
           text: "secret prompt",
           idempotencyKey: "chat-run-1:user",
@@ -599,7 +578,7 @@ describe("user turn transcript persistence", () => {
       const sessionStore = {
         [target.sessionKey]: {
           sessionId: target.sessionId,
-          sessionFile: target.transcriptPath,
+          sessionFile: target.sqliteMarker,
           updatedAt: 1,
         },
       };
@@ -619,7 +598,7 @@ describe("user turn transcript persistence", () => {
         updateMode: "none",
       });
 
-      expect(persisted?.sessionFile).toBe(target.transcriptPath);
+      expect(persisted?.sessionFile).toBe(target.sqliteMarker);
       await expect(readTranscriptMessages(target)).resolves.toEqual([
         expect.objectContaining({
           role: "user",
@@ -640,11 +619,7 @@ describe("user turn transcript persistence", () => {
           idempotencyKey: "chat-run-1:user",
         },
         target: {
-          transcriptPath: target.transcriptPath,
-          sessionId: target.sessionId,
-          sessionKey: target.sessionKey,
-          agentId: target.agentId,
-          cwd: dir,
+          ...target,
         },
         updateMode: "none",
       });
@@ -676,11 +651,7 @@ describe("user turn transcript persistence", () => {
           idempotencyKey: "chat-run-ambient:user",
         },
         target: {
-          transcriptPath: target.transcriptPath,
-          sessionId: target.sessionId,
-          sessionKey: target.sessionKey,
-          agentId: target.agentId,
-          cwd: dir,
+          ...target,
         },
         updateMode: "none",
         onMessagePersisted: (message) => {
@@ -725,11 +696,7 @@ describe("user turn transcript persistence", () => {
           };
         },
         target: {
-          transcriptPath: target.transcriptPath,
-          sessionId: target.sessionId,
-          sessionKey: target.sessionKey,
-          agentId: target.agentId,
-          cwd: dir,
+          ...target,
         },
         updateMode: "none",
       });
@@ -765,7 +732,7 @@ describe("user turn transcript persistence", () => {
 
     it("appends #99495 media that resolves after the admitted turn reached the provider", async () => {
       const dir = createTempDir("openclaw-user-turn-recorder-late-media-");
-      const transcriptPath = path.join(dir, "session.jsonl");
+      const target = createSqliteTranscriptTarget({ dir });
       const admittedInput = {
         text: "describe this",
         timestamp: 123,
@@ -786,20 +753,14 @@ describe("user turn transcript persistence", () => {
           return await mediaInput;
         },
         target: {
-          transcriptPath,
-          sessionId: "session-1",
-          sessionKey: "main",
-          cwd: dir,
+          ...target,
         },
       });
       const persistence = recorder.persistFallback();
       await resolverStarted;
-      await appendUserTurnTranscriptMessage({
-        transcriptPath,
+      await persistUserTurnTranscript({
+        ...target,
         input: admittedInput,
-        sessionId: "session-1",
-        sessionKey: "main",
-        cwd: dir,
       });
       recorder.markRuntimePersisted(recorder.message);
       recorder.markSentToProvider?.();
@@ -810,7 +771,7 @@ describe("user turn transcript persistence", () => {
 
       await persistence;
 
-      expect(readTranscriptMessages(transcriptPath)).toEqual([
+      await expect(readTranscriptMessages(target)).resolves.toEqual([
         expect.objectContaining({
           content: "describe this",
           idempotencyKey: "chat-run-late:user",
@@ -825,7 +786,7 @@ describe("user turn transcript persistence", () => {
 
     it("keeps #99495 media inline when it resolves before first serialization", async () => {
       const dir = createTempDir("openclaw-user-turn-recorder-early-media-");
-      const transcriptPath = path.join(dir, "session.jsonl");
+      const target = createSqliteTranscriptTarget({ dir });
       const recorder = createUserTurnTranscriptRecorder({
         input: {
           text: "describe this",
@@ -839,17 +800,14 @@ describe("user turn transcript persistence", () => {
           media: [{ path: path.join(dir, "image.png"), contentType: "image/png" }],
         }),
         target: {
-          transcriptPath,
-          sessionId: "session-1",
-          sessionKey: "main",
-          cwd: dir,
+          ...target,
         },
       });
 
       await recorder.persistFallback();
       recorder.markSentToProvider?.();
 
-      expect(readTranscriptMessages(transcriptPath)).toEqual([
+      await expect(readTranscriptMessages(target)).resolves.toEqual([
         expect.objectContaining({
           content: "describe this",
           idempotencyKey: "chat-run-early:user",
@@ -872,11 +830,7 @@ describe("user turn transcript persistence", () => {
           throw new Error("media staging failed");
         },
         target: {
-          transcriptPath: target.transcriptPath,
-          sessionId: target.sessionId,
-          sessionKey: target.sessionKey,
-          agentId: target.agentId,
-          cwd: dir,
+          ...target,
         },
         updateMode: "none",
         onPersistenceError: (error) => errors.push(error),
@@ -909,11 +863,7 @@ describe("user turn transcript persistence", () => {
           timestamp: 123,
         },
         target: {
-          transcriptPath: target.transcriptPath,
-          sessionId: target.sessionId,
-          sessionKey: target.sessionKey,
-          agentId: target.agentId,
-          cwd: dir,
+          ...target,
         },
         updateMode: "none",
       });
@@ -937,11 +887,7 @@ describe("user turn transcript persistence", () => {
           timestamp: 123,
         },
         target: {
-          transcriptPath: target.transcriptPath,
-          sessionId: target.sessionId,
-          sessionKey: target.sessionKey,
-          agentId: target.agentId,
-          cwd: dir,
+          ...target,
         },
         updateMode: "none",
       });
@@ -956,7 +902,7 @@ describe("user turn transcript persistence", () => {
       await expect(readTranscriptMessages(target)).resolves.toEqual([]);
     });
 
-    it("approved persistence still writes canonical targets after runtime persistence is marked", async () => {
+    it("approved persistence does not duplicate runtime-owned SQLite turns", async () => {
       const dir = createTempDir("openclaw-user-turn-recorder-runtime-canonical-");
       const storePath = path.join(dir, "sessions.json");
       const sessionStore = {};
@@ -982,13 +928,15 @@ describe("user turn transcript persistence", () => {
         timestamp: 123,
       });
 
-      const persisted = await recorder.persistApproved();
-
-      expect(persisted?.message).toMatchObject({
-        role: "user",
-        content: "runtime-owned turn",
-      });
-      expect(persisted?.sessionFile).toContain("sqlite:main:session-1:");
+      await expect(recorder.persistApproved()).resolves.toBeUndefined();
+      await expect(
+        readTranscriptMessages({
+          agentId: "main",
+          sessionId: "session-1",
+          sessionKey: "agent:main:main",
+          storePath,
+        }),
+      ).resolves.toEqual([]);
     });
 
     it("does not fallback-persist after before_agent_run blocks the turn", async () => {
@@ -1000,11 +948,7 @@ describe("user turn transcript persistence", () => {
           timestamp: 123,
         },
         target: {
-          transcriptPath: target.transcriptPath,
-          sessionId: target.sessionId,
-          sessionKey: target.sessionKey,
-          agentId: target.agentId,
-          cwd: dir,
+          ...target,
         },
         updateMode: "none",
       });
@@ -1025,26 +969,18 @@ describe("user turn transcript persistence", () => {
           timestamp: 123,
         },
         target: {
-          transcriptPath: staleTarget.transcriptPath,
-          sessionId: staleTarget.sessionId,
-          sessionKey: staleTarget.sessionKey,
-          agentId: staleTarget.agentId,
-          cwd: dir,
+          ...staleTarget,
         },
         updateMode: "none",
       });
 
       const persisted = await recorder.persistApproved({
         target: {
-          transcriptPath: admittedTarget.transcriptPath,
-          sessionId: admittedTarget.sessionId,
-          sessionKey: admittedTarget.sessionKey,
-          agentId: admittedTarget.agentId,
-          cwd: dir,
+          ...admittedTarget,
         },
       });
 
-      expect(persisted?.sessionFile).toBe(admittedTarget.transcriptPath);
+      expect(persisted?.sessionFile).toBe(admittedTarget.sqliteMarker);
       await expect(readTranscriptMessages(staleTarget)).resolves.toEqual([]);
       await expect(readTranscriptMessages(admittedTarget)).resolves.toEqual([
         expect.objectContaining({
@@ -1067,11 +1003,7 @@ describe("user turn transcript persistence", () => {
           timestamp: 123,
         },
         target: {
-          transcriptPath: target.transcriptPath,
-          sessionId: target.sessionId,
-          sessionKey: target.sessionKey,
-          agentId: target.agentId,
-          cwd: dir,
+          ...target,
         },
         updateMode: "none",
       });
@@ -1114,11 +1046,7 @@ describe("user turn transcript persistence", () => {
           timestamp: 123,
         },
         target: {
-          transcriptPath: target.transcriptPath,
-          sessionId: target.sessionId,
-          sessionKey: target.sessionKey,
-          agentId: target.agentId,
-          cwd: dir,
+          ...target,
         },
         updateMode: "none",
         onPersistenceError: (error) => errors.push(error),

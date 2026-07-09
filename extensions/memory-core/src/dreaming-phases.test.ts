@@ -165,7 +165,9 @@ async function seedDreamingSessionTranscript(params: {
       typeof message.timestamp === "number" ? message.timestamp : Date.parse(message.timestamp),
     )
     .filter((timestamp) => Number.isFinite(timestamp));
-  const updatedAt = timestamps.length > 0 ? Math.max(...timestamps) : Date.now();
+  // Accessor writes run normal maintenance; keep fixture entries fresh while
+  // retaining per-message timestamps as the dreaming corpus clock.
+  const updatedAt = Math.max(Date.now(), ...timestamps);
   await fs.mkdir(sessionsDir, { recursive: true });
   const sessionFile = formatSqliteSessionFileMarker({
     agentId,
@@ -176,7 +178,7 @@ async function seedDreamingSessionTranscript(params: {
     agentId,
     sessionKey,
     storePath,
-    entry: { sessionId: params.sessionId, sessionFile, updatedAt },
+    entry: { sessionFile, sessionId: params.sessionId, updatedAt },
   });
   for (const message of params.messages) {
     await appendSessionTranscriptMessageByIdentity({
@@ -195,7 +197,7 @@ async function seedDreamingSessionTranscript(params: {
     agentId,
     sessionKey,
     storePath,
-    entry: { sessionId: params.sessionId, sessionFile, updatedAt },
+    entry: { sessionFile, sessionId: params.sessionId, updatedAt },
   });
 }
 
@@ -1099,7 +1101,7 @@ describe("memory-core dreaming phases", () => {
     setDreamingTestEnv(path.join(workspaceDir, ".state"));
     const transcriptName = `dreaming-${"x".repeat(48)}`;
     const snippetTranscriptName = "snippet-boundary";
-    const renderedSource = `[main/sessions/main/${transcriptName}#L3] `;
+    const renderedSource = `[main/sessions/main/${transcriptName}#L4] `;
     const renderedPadding = "r".repeat(343 - renderedSource.length - "User: ".length);
     const snippetPadding = "s".repeat(273);
     await seedDreamingSessionTranscript({
@@ -1192,7 +1194,7 @@ describe("memory-core dreaming phases", () => {
     expect(corpus).toContain("Set retention to 365 days.");
     expect(corpus).toContain(`${renderedSource}User: ${renderedPadding}\n`);
     expect(corpus).toContain(
-      `[main/sessions/main/${snippetTranscriptName}#L1] User: ${snippetPadding}\n`,
+      `[main/sessions/main/${snippetTranscriptName}#L2] User: ${snippetPadding}\n`,
     );
     expect(corpus).not.toContain("🎉");
     expect(corpus).not.toContain("🌍");

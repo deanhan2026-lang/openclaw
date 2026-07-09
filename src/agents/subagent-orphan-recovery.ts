@@ -23,7 +23,7 @@ import { readSessionMessagesAsync } from "../gateway/session-transcript-readers.
 import { formatErrorMessage } from "../infra/errors.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { truncateUtf16Safe } from "../utils.js";
-import { resolveInternalSessionEffectsTranscriptPath } from "./internal-session-effects.js";
+import { resolveInternalSessionEffectsTarget } from "./internal-session-effects.js";
 import {
   evaluateSubagentRecoveryGate,
   markSubagentRecoveryAttempt,
@@ -185,7 +185,13 @@ async function resumeOrphanedSession(params: {
       previousRunId: params.originalRunId,
       nextRunId: result.runId,
       fallback: params.originalRun,
-      transcriptFile: resolveInternalSessionEffectsTranscriptPath(result.runId),
+      transcriptTarget: resolveInternalSessionEffectsTarget({
+        agentId: resolveAgentIdFromSessionKey(params.sessionKey),
+        runId: result.runId,
+        storePath: resolveStorePath(getRuntimeConfig().session?.store, {
+          agentId: resolveAgentIdFromSessionKey(params.sessionKey),
+        }),
+      }),
       // Persist the stable original task (not the synthetic resume wrapper) so
       // that any further post-restart redispatch reconstructs the same
       // canonical task. Persisting `resumeMessage` instead would accumulate a

@@ -52,6 +52,7 @@ import { resolveAvailableAgentHarnessPolicy } from "../harness/selection.js";
 import { resolveCliRuntimeExecutionProvider } from "../model-runtime-aliases.js";
 import { isCliProvider } from "../model-selection.js";
 import { resolveOpenAIRuntimeProvider } from "../openai-routing.js";
+import type { AgentRunSessionTarget } from "../run-session-target.js";
 import { resolveAgentRunAbortLifecycleFields } from "../run-termination.js";
 import { buildAgentRuntimeAuthPlan } from "../runtime-plan/auth.js";
 import type { AgentMessage } from "../runtime/index.js";
@@ -488,6 +489,7 @@ export function runAgentAttempt(params: {
   sessionEntry: SessionEntry | undefined;
   sessionId: string;
   sessionKey: string | undefined;
+  sessionTarget?: AgentRunSessionTarget;
   sessionAgentId: string;
   sessionFile: string;
   workspaceDir: string;
@@ -793,6 +795,8 @@ export function runAgentAttempt(params: {
   return runEmbeddedAgent({
     sessionId: params.sessionId,
     sessionKey: params.sessionKey,
+    sessionTarget: params.sessionTarget,
+    sandboxSessionKey: params.sessionKey,
     agentId: params.sessionAgentId,
     trigger: "user",
     messageChannel: params.messageChannel,

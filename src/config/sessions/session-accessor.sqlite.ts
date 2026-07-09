@@ -39,6 +39,7 @@ import {
 import type { DeliveryContext } from "../../utils/delivery-context.types.js";
 import { formatSessionArchiveTimestamp } from "./artifacts.js";
 import type { SessionDiskBudgetSweepResult } from "./disk-budget.js";
+import { isInternalSessionEffectsKey } from "./internal-session-key.js";
 import { deriveLastRoutePatch, deriveSessionMetaPatch } from "./metadata.js";
 import type {
   ExactSessionEntry,
@@ -352,6 +353,9 @@ export function listSqliteSessionEntries(
   ).rows;
   return rows
     .map((row) => {
+      if (isInternalSessionEffectsKey(row.session_key)) {
+        return undefined;
+      }
       const entry = parseSessionEntryRow(row);
       return entry ? { sessionKey: row.session_key, entry } : undefined;
     })
@@ -410,46 +414,50 @@ export async function patchSqliteSessionEntry(
   const resolved = resolveSqliteScope(scope);
   return await runExclusiveSqliteSessionWrite(resolved, async () => {
     const maintenancePlans: SqliteSessionEntryMaintenancePlan[] = [];
-    const result = await runOpenClawAgentWriteTransactionAsync(async (writeDatabase) => {
-      const fresh = options.replaceEntry
-        ? readExactSessionEntryRow(writeDatabase, resolved.sessionKey)
-        : readSessionEntryRow(writeDatabase, resolved.sessionKey);
-      const writeBase = fresh?.entry ?? options.fallbackEntry;
-      if (!writeBase) {
-        return null;
-      }
-      const patch = await update(cloneSessionEntry(writeBase), {
-        existingEntry: fresh?.entry ? cloneSessionEntry(fresh.entry) : undefined,
-      });
-      if (!patch) {
-        return cloneSessionEntry(writeBase);
-      }
-      const merged = options.replaceEntry
-        ? cloneSessionEntry(patch as SessionEntry)
-        : options.preserveActivity
-          ? mergeSessionEntryPreserveActivity(writeBase, patch)
-          : mergeSessionEntry(writeBase, patch);
-      const next = options.replaceEntry
-        ? merged
-        : preserveSqliteSameKeySessionRolloverLineage({
-            next: merged,
-            previous: writeBase,
-            sessionKey: resolved.sessionKey,
-          });
-      writeSessionEntry(writeDatabase, resolved.sessionKey, next);
-      deleteLegacySessionEntryRows(writeDatabase, fresh?.legacyKeys ?? [], resolved.sessionKey);
-      maintenancePlans.push(
-        applySqliteSessionEntryMaintenance(writeDatabase, {
-          activeSessionKey: resolved.sessionKey,
-          archiveDirectory: resolveSqliteTranscriptArchiveDirectory(resolved),
-          maintenanceConfig: options.maintenanceConfig,
-          skipMaintenance: options.skipMaintenance,
-        }),
-      );
-      return cloneSessionEntry(next);
-    }, toDatabaseOptions(resolved), {
-      operationLabel: "session-entry.patch",
-    });
+    const result = await runOpenClawAgentWriteTransactionAsync(
+      async (writeDatabase) => {
+        const fresh = options.replaceEntry
+          ? readExactSessionEntryRow(writeDatabase, resolved.sessionKey)
+          : readSessionEntryRow(writeDatabase, resolved.sessionKey);
+        const writeBase = fresh?.entry ?? options.fallbackEntry;
+        if (!writeBase) {
+          return null;
+        }
+        const patch = await update(cloneSessionEntry(writeBase), {
+          existingEntry: fresh?.entry ? cloneSessionEntry(fresh.entry) : undefined,
+        });
+        if (!patch) {
+          return cloneSessionEntry(writeBase);
+        }
+        const merged = options.replaceEntry
+          ? cloneSessionEntry(patch as SessionEntry)
+          : options.preserveActivity
+            ? mergeSessionEntryPreserveActivity(writeBase, patch)
+            : mergeSessionEntry(writeBase, patch);
+        const next = options.replaceEntry
+          ? merged
+          : preserveSqliteSameKeySessionRolloverLineage({
+              next: merged,
+              previous: writeBase,
+              sessionKey: resolved.sessionKey,
+            });
+        writeSessionEntry(writeDatabase, resolved.sessionKey, next);
+        deleteLegacySessionEntryRows(writeDatabase, fresh?.legacyKeys ?? [], resolved.sessionKey);
+        maintenancePlans.push(
+          applySqliteSessionEntryMaintenance(writeDatabase, {
+            activeSessionKey: resolved.sessionKey,
+            archiveDirectory: resolveSqliteTranscriptArchiveDirectory(resolved),
+            maintenanceConfig: options.maintenanceConfig,
+            skipMaintenance: options.skipMaintenance,
+          }),
+        );
+        return cloneSessionEntry(next);
+      },
+      toDatabaseOptions(resolved),
+      {
+        operationLabel: "session-entry.patch",
+      },
+    );
     finalizeSqliteSessionEntryMaintenancePlansBestEffort(resolved, maintenancePlans);
     return result;
   });
@@ -467,44 +475,48 @@ export async function patchSqliteSessionEntryTarget(
   const resolved = resolveSqliteStoreScope(scope.storePath, { agentId: scope.agentId });
   return await runExclusiveSqliteSessionWrite(resolved, async () => {
     const maintenancePlans: SqliteSessionEntryMaintenancePlan[] = [];
-    const result = await runOpenClawAgentWriteTransactionAsync(async (writeDatabase) => {
-      const fresh = resolveSqliteLifecyclePrimaryEntry(writeDatabase, scope.target);
-      const writeBase = fresh?.entry ?? options.fallbackEntry;
-      if (!writeBase) {
-        return null;
-      }
-      const patch = await update(cloneSessionEntry(writeBase), {
-        existingEntry: fresh?.entry ? cloneSessionEntry(fresh.entry) : undefined,
-      });
-      if (!patch) {
-        return cloneSessionEntry(writeBase);
-      }
-      const merged = options.replaceEntry
-        ? cloneSessionEntry(patch as SessionEntry)
-        : options.preserveActivity
-          ? mergeSessionEntryPreserveActivity(writeBase, patch)
-          : mergeSessionEntry(writeBase, patch);
-      const next = options.replaceEntry
-        ? merged
-        : preserveSqliteSameKeySessionRolloverLineage({
-            next: merged,
-            previous: writeBase,
-            sessionKey: scope.target.canonicalKey,
-          });
-      deleteSqliteLifecycleTargetRows(writeDatabase, scope.target);
-      writeSessionEntry(writeDatabase, scope.target.canonicalKey, next);
-      maintenancePlans.push(
-        applySqliteSessionEntryMaintenance(writeDatabase, {
-          activeSessionKey: scope.target.canonicalKey,
-          archiveDirectory: resolveSqliteTranscriptArchiveDirectory(resolved),
-          maintenanceConfig: options.maintenanceConfig,
-          skipMaintenance: options.skipMaintenance,
-        }),
-      );
-      return cloneSessionEntry(next);
-    }, toDatabaseOptions(resolved), {
-      operationLabel: "session-entry-target.patch",
-    });
+    const result = await runOpenClawAgentWriteTransactionAsync(
+      async (writeDatabase) => {
+        const fresh = resolveSqliteLifecyclePrimaryEntry(writeDatabase, scope.target);
+        const writeBase = fresh?.entry ?? options.fallbackEntry;
+        if (!writeBase) {
+          return null;
+        }
+        const patch = await update(cloneSessionEntry(writeBase), {
+          existingEntry: fresh?.entry ? cloneSessionEntry(fresh.entry) : undefined,
+        });
+        if (!patch) {
+          return cloneSessionEntry(writeBase);
+        }
+        const merged = options.replaceEntry
+          ? cloneSessionEntry(patch as SessionEntry)
+          : options.preserveActivity
+            ? mergeSessionEntryPreserveActivity(writeBase, patch)
+            : mergeSessionEntry(writeBase, patch);
+        const next = options.replaceEntry
+          ? merged
+          : preserveSqliteSameKeySessionRolloverLineage({
+              next: merged,
+              previous: writeBase,
+              sessionKey: scope.target.canonicalKey,
+            });
+        deleteSqliteLifecycleTargetRows(writeDatabase, scope.target);
+        writeSessionEntry(writeDatabase, scope.target.canonicalKey, next);
+        maintenancePlans.push(
+          applySqliteSessionEntryMaintenance(writeDatabase, {
+            activeSessionKey: scope.target.canonicalKey,
+            archiveDirectory: resolveSqliteTranscriptArchiveDirectory(resolved),
+            maintenanceConfig: options.maintenanceConfig,
+            skipMaintenance: options.skipMaintenance,
+          }),
+        );
+        return cloneSessionEntry(next);
+      },
+      toDatabaseOptions(resolved),
+      {
+        operationLabel: "session-entry-target.patch",
+      },
+    );
     finalizeSqliteSessionEntryMaintenancePlansBestEffort(resolved, maintenancePlans);
     return result;
   });
@@ -531,6 +543,7 @@ export async function forkSqliteSessionTranscriptFromParent(
         result = forkSqliteParentTranscriptInTransaction(database, resolved, {
           parentEntry: params.parentEntry,
           parentSessionKey: params.parentSessionKey,
+          targetSessionId: params.targetSessionId,
           targetSessionKey: params.sessionKey,
         });
       }, toDatabaseOptions(resolved));
@@ -556,7 +569,7 @@ export async function forkSqliteSessionTranscriptFromParent(
     sessionKey: normalizeSqliteSessionKey(params.parentSessionKey),
   });
   return await runExclusiveSqliteSessionWrite(target, async () => {
-    const sessionId = randomUUID();
+    const sessionId = params.targetSessionId ?? randomUUID();
     const targetScope = {
       ...target,
       sessionId,
@@ -742,34 +755,38 @@ export async function updateSqliteSessionEntry(
   const resolved = resolveSqliteScope(scope);
   return await runExclusiveSqliteSessionWrite(resolved, async () => {
     const maintenancePlans: SqliteSessionEntryMaintenancePlan[] = [];
-    const result = await runOpenClawAgentWriteTransactionAsync(async (writeDatabase) => {
-      const fresh = readSessionEntryRow(writeDatabase, resolved.sessionKey);
-      if (!fresh) {
-        return null;
-      }
-      const patch = await update(cloneSessionEntry(fresh.entry));
-      if (!patch) {
-        return cloneSessionEntry(fresh.entry);
-      }
-      const merged = mergeSessionEntry(fresh.entry, patch);
-      const next = preserveSqliteSameKeySessionRolloverLineage({
-        next: merged,
-        previous: fresh.entry,
-        sessionKey: resolved.sessionKey,
-      });
-      writeSessionEntry(writeDatabase, resolved.sessionKey, next);
-      deleteLegacySessionEntryRows(writeDatabase, fresh.legacyKeys, resolved.sessionKey);
-      maintenancePlans.push(
-        applySqliteSessionEntryMaintenance(writeDatabase, {
-          activeSessionKey: resolved.sessionKey,
-          archiveDirectory: resolveSqliteTranscriptArchiveDirectory(resolved),
-          skipMaintenance: options.skipMaintenance,
-        }),
-      );
-      return cloneSessionEntry(next);
-    }, toDatabaseOptions(resolved), {
-      operationLabel: "session-entry.update",
-    });
+    const result = await runOpenClawAgentWriteTransactionAsync(
+      async (writeDatabase) => {
+        const fresh = readSessionEntryRow(writeDatabase, resolved.sessionKey);
+        if (!fresh) {
+          return null;
+        }
+        const patch = await update(cloneSessionEntry(fresh.entry));
+        if (!patch) {
+          return cloneSessionEntry(fresh.entry);
+        }
+        const merged = mergeSessionEntry(fresh.entry, patch);
+        const next = preserveSqliteSameKeySessionRolloverLineage({
+          next: merged,
+          previous: fresh.entry,
+          sessionKey: resolved.sessionKey,
+        });
+        writeSessionEntry(writeDatabase, resolved.sessionKey, next);
+        deleteLegacySessionEntryRows(writeDatabase, fresh.legacyKeys, resolved.sessionKey);
+        maintenancePlans.push(
+          applySqliteSessionEntryMaintenance(writeDatabase, {
+            activeSessionKey: resolved.sessionKey,
+            archiveDirectory: resolveSqliteTranscriptArchiveDirectory(resolved),
+            skipMaintenance: options.skipMaintenance,
+          }),
+        );
+        return cloneSessionEntry(next);
+      },
+      toDatabaseOptions(resolved),
+      {
+        operationLabel: "session-entry.update",
+      },
+    );
     finalizeSqliteSessionEntryMaintenancePlansBestEffort(resolved, maintenancePlans);
     return result;
   });
@@ -984,45 +1001,51 @@ export async function applySqliteSessionEntryLifecycleMutation(params: {
     } catch (error) {
       captureArtifactCleanupError(error);
     }
-    await runOpenClawAgentWriteTransactionAsync(async (transactionDb) => {
-      for (const removal of projected.removals) {
-        const entry = readExactSessionEntryRow(transactionDb, removal.sessionKey)?.entry;
-        if (!sqliteSessionEntriesEqual(entry, removal.expectedEntry)) {
-          throw new Error(
-            `SQLite session entry changed before lifecycle removal for ${removal.sessionKey}`,
-          );
+    await runOpenClawAgentWriteTransactionAsync(
+      async (transactionDb) => {
+        for (const removal of projected.removals) {
+          const entry = readExactSessionEntryRow(transactionDb, removal.sessionKey)?.entry;
+          if (!sqliteSessionEntriesEqual(entry, removal.expectedEntry)) {
+            throw new Error(
+              `SQLite session entry changed before lifecycle removal for ${removal.sessionKey}`,
+            );
+          }
+          if (!shouldRemoveSqliteSessionEntry(entry, removal.removal)) {
+            continue;
+          }
+          deleteSqliteSessionEntryRows(transactionDb, removal.sessionKey);
+          removedSessionKeys.push(removal.sessionKey);
         }
-        if (!shouldRemoveSqliteSessionEntry(entry, removal.removal)) {
-          continue;
+        for (const { sessionKey, entry, expectedEntry } of projected.upsertedEntries) {
+          const currentEntry = readExactSessionEntryRow(transactionDb, sessionKey)?.entry;
+          if (!sqliteSessionEntriesEqual(currentEntry, expectedEntry)) {
+            throw new Error(
+              `SQLite session entry changed before lifecycle upsert for ${sessionKey}`,
+            );
+          }
+          writeSessionEntry(transactionDb, sessionKey, entry);
         }
-        deleteSqliteSessionEntryRows(transactionDb, removal.sessionKey);
-        removedSessionKeys.push(removal.sessionKey);
-      }
-      for (const { sessionKey, entry, expectedEntry } of projected.upsertedEntries) {
-        const currentEntry = readExactSessionEntryRow(transactionDb, sessionKey)?.entry;
-        if (!sqliteSessionEntriesEqual(currentEntry, expectedEntry)) {
-          throw new Error(`SQLite session entry changed before lifecycle upsert for ${sessionKey}`);
-        }
-        writeSessionEntry(transactionDb, sessionKey, entry);
-      }
-      maintenancePlans.push(
-        applySqliteSessionEntryMaintenance(transactionDb, {
-          activeSessionKey: params.activeSessionKey ?? "",
-          archiveDirectory: resolveSqliteTranscriptArchiveDirectory(resolved),
-          forceMaintenance: params.maintenanceOverride !== undefined,
-          maintenanceConfig: params.maintenanceOverride
-            ? { ...resolveMaintenanceConfig(), ...params.maintenanceOverride }
-            : undefined,
-          skipMaintenance: params.skipMaintenance,
-        }),
-      );
-      archivedTranscripts = deleteMaterializedSqliteSessionStatePlans(
-        transactionDb,
-        materializedRemovalPlans,
-      );
-    }, toDatabaseOptions(resolved), {
-      operationLabel: "session-lifecycle.apply",
-    });
+        maintenancePlans.push(
+          applySqliteSessionEntryMaintenance(transactionDb, {
+            activeSessionKey: params.activeSessionKey ?? "",
+            archiveDirectory: resolveSqliteTranscriptArchiveDirectory(resolved),
+            forceMaintenance: params.maintenanceOverride !== undefined,
+            maintenanceConfig: params.maintenanceOverride
+              ? { ...resolveMaintenanceConfig(), ...params.maintenanceOverride }
+              : undefined,
+            skipMaintenance: params.skipMaintenance,
+          }),
+        );
+        archivedTranscripts = deleteMaterializedSqliteSessionStatePlans(
+          transactionDb,
+          materializedRemovalPlans,
+        );
+      },
+      toDatabaseOptions(resolved),
+      {
+        operationLabel: "session-lifecycle.apply",
+      },
+    );
     const maintenanceArchivedTranscripts = finalizeSqliteSessionEntryMaintenancePlansBestEffort(
       resolved,
       maintenancePlans,
@@ -1558,72 +1581,78 @@ export async function appendSqliteExpectedSessionTranscriptTurn(
     sessionId: options.expectedSessionId,
   });
   return await runExclusiveSqliteSessionWrite(resolved, async () => {
-    return await runOpenClawAgentWriteTransactionAsync(async (transactionDb) => {
-      const fresh = readSessionEntryRow(transactionDb, resolved.sessionKey);
-      if (
-        !fresh ||
-        fresh.entry.sessionId !== options.expectedSessionId ||
-        (options.expectedLifecycleRevision !== undefined &&
-          fresh.entry.lifecycleRevision !== options.expectedLifecycleRevision)
-      ) {
+    return await runOpenClawAgentWriteTransactionAsync(
+      async (transactionDb) => {
+        const fresh = readSessionEntryRow(transactionDb, resolved.sessionKey);
+        if (
+          !fresh ||
+          fresh.entry.sessionId !== options.expectedSessionId ||
+          (options.expectedLifecycleRevision !== undefined &&
+            fresh.entry.lifecycleRevision !== options.expectedLifecycleRevision)
+        ) {
+          return {
+            appendedMessages: [],
+            rejectedReason: "session-rebound",
+            sessionEntry: fresh?.entry,
+            sessionFile: options.sessionFile,
+          };
+        }
+        const messages = await selectAppendableSqliteTranscriptTurnMessages(
+          {
+            agentId: resolved.agentId,
+            sessionFile: options.sessionFile,
+            sessionId: options.expectedSessionId,
+            sessionKey: resolved.sessionKey,
+            ...(scope.storePath ? { storePath: scope.storePath } : {}),
+          },
+          options.messages,
+        );
+
+        const appendedMessages: TranscriptMessageAppendResult<unknown>[] = [];
+        for (const append of messages) {
+          const { shouldAppend: _shouldAppend, ...appendOptions } = append;
+          const appended = appendSqliteTranscriptMessageInTransaction(transactionDb, resolved, {
+            ...appendOptions,
+            ...((append.cwd ?? options.cwd) ? { cwd: append.cwd ?? options.cwd } : {}),
+            ...((append.config ?? options.config)
+              ? { config: append.config ?? options.config }
+              : {}),
+          });
+          if (appended) {
+            appendedMessages.push(appended);
+          }
+        }
+
+        const appendedCount = appendedMessages.filter((message) => message.appended).length;
+        const touchUpdatedAt =
+          options.touchSessionEntry === true && appendedCount > 0 ? Date.now() : undefined;
+        const sessionPatch: Partial<SessionEntry> = {
+          ...(fresh.entry.sessionFile === options.sessionFile
+            ? {}
+            : { sessionFile: options.sessionFile }),
+          ...(touchUpdatedAt !== undefined
+            ? { updatedAt: Math.max(fresh.entry.updatedAt ?? 0, touchUpdatedAt) }
+            : {}),
+        };
+        const next =
+          Object.keys(sessionPatch).length > 0
+            ? mergeSessionEntry(fresh.entry, sessionPatch)
+            : fresh.entry;
+        if (next !== fresh.entry) {
+          writeSessionEntry(transactionDb, resolved.sessionKey, next);
+          deleteLegacySessionEntryRows(transactionDb, fresh.legacyKeys, resolved.sessionKey);
+        }
         return {
-          appendedMessages: [],
-          rejectedReason: "session-rebound",
-          sessionEntry: fresh?.entry,
+          appendedMessages,
+          sessionEntry: cloneSessionEntry(next),
           sessionFile: options.sessionFile,
         };
-      }
-      const messages = await selectAppendableSqliteTranscriptTurnMessages(
-        {
-          agentId: resolved.agentId,
-          sessionFile: options.sessionFile,
-          sessionId: options.expectedSessionId,
-          sessionKey: resolved.sessionKey,
-          ...(scope.storePath ? { storePath: scope.storePath } : {}),
-        },
-        options.messages,
-      );
-
-      const appendedMessages: TranscriptMessageAppendResult<unknown>[] = [];
-      for (const append of messages) {
-        const { shouldAppend: _shouldAppend, ...appendOptions } = append;
-        const appended = appendSqliteTranscriptMessageInTransaction(transactionDb, resolved, {
-          ...appendOptions,
-          ...((append.cwd ?? options.cwd) ? { cwd: append.cwd ?? options.cwd } : {}),
-          ...((append.config ?? options.config) ? { config: append.config ?? options.config } : {}),
-        });
-        if (appended) {
-          appendedMessages.push(appended);
-        }
-      }
-
-      const appendedCount = appendedMessages.filter((message) => message.appended).length;
-      const touchUpdatedAt =
-        options.touchSessionEntry === true && appendedCount > 0 ? Date.now() : undefined;
-      const sessionPatch: Partial<SessionEntry> = {
-        ...(fresh.entry.sessionFile === options.sessionFile
-          ? {}
-          : { sessionFile: options.sessionFile }),
-        ...(touchUpdatedAt !== undefined
-          ? { updatedAt: Math.max(fresh.entry.updatedAt ?? 0, touchUpdatedAt) }
-          : {}),
-      };
-      const next =
-        Object.keys(sessionPatch).length > 0
-          ? mergeSessionEntry(fresh.entry, sessionPatch)
-          : fresh.entry;
-      if (next !== fresh.entry) {
-        writeSessionEntry(transactionDb, resolved.sessionKey, next);
-        deleteLegacySessionEntryRows(transactionDb, fresh.legacyKeys, resolved.sessionKey);
-      }
-      return {
-        appendedMessages,
-        sessionEntry: cloneSessionEntry(next),
-        sessionFile: options.sessionFile,
-      };
-    }, toDatabaseOptions(resolved), {
-      operationLabel: "session-transcript.append-expected-turn",
-    });
+      },
+      toDatabaseOptions(resolved),
+      {
+        operationLabel: "session-transcript.append-expected-turn",
+      },
+    );
   });
 }
 
@@ -4160,6 +4189,7 @@ function forkSqliteParentTranscriptInTransaction(
   params: {
     parentEntry: SessionEntry;
     parentSessionKey: string;
+    targetSessionId?: string;
     targetSessionKey: string;
   },
 ): ForkSessionFromParentTranscriptResult {
@@ -4170,7 +4200,7 @@ function forkSqliteParentTranscriptInTransaction(
   if (!source) {
     return { status: "failed" };
   }
-  const sessionId = randomUUID();
+  const sessionId = params.targetSessionId ?? randomUUID();
   const targetScope = {
     ...resolved,
     sessionId,
