@@ -8,6 +8,7 @@ import {
   normalizeOptionalString,
   readStringValue,
 } from "@openclaw/normalization-core/string-coerce";
+import { isNamedProfile } from "../config/paths.js";
 import { DEFAULT_AGENT_ID } from "../routing/session-key.js";
 import type { CommandExplanationSummary } from "./command-analysis/explain.js";
 import { sha256Hex, sha256HexPrefix } from "./crypto-digest.js";
@@ -350,7 +351,7 @@ function resolveLegacyExecApprovalsPath(): string {
 }
 
 function hasUnmigratedLegacyExecApprovals(filePath: string): boolean {
-  if (!process.env.OPENCLAW_STATE_DIR?.trim()) {
+  if (!process.env.OPENCLAW_STATE_DIR?.trim() || isNamedProfile()) {
     return false;
   }
   const legacyPath = resolveLegacyExecApprovalsPath();

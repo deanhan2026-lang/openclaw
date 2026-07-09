@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { withSuppressedNotes } from "../../../packages/terminal-core/src/note.js";
 import { readConfigFileSnapshot, setRuntimeConfigSnapshot } from "../../config/config.js";
-import { resolveLegacyStateDirs, resolveOAuthDir, resolveStateDir } from "../../config/paths.js";
+import {
+  isNamedProfile,
+  resolveLegacyStateDirs,
+  resolveOAuthDir,
+  resolveStateDir,
+} from "../../config/paths.js";
 import type { ConfigFileSnapshot } from "../../config/types.js";
 import { resolveRequiredHomeDir } from "../../infra/home-dir.js";
 import type { RuntimeEnv } from "../../runtime.js";
@@ -99,7 +104,7 @@ function hasBundledChannelLegacyStateMigrationInputs(stateDir: string, oauthDir:
 }
 
 function hasLegacyExecApprovalsMigrationInput(stateDir: string): boolean {
-  if (!process.env.OPENCLAW_STATE_DIR?.trim()) {
+  if (!process.env.OPENCLAW_STATE_DIR?.trim() || isNamedProfile()) {
     return false;
   }
   const homeDir = resolveRequiredHomeDir(process.env, os.homedir);

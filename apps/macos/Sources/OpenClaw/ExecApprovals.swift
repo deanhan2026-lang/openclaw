@@ -252,18 +252,12 @@ enum ExecApprovalsStore {
 
     private static func legacyStateDirURLs() -> [URL] {
         if let home = OpenClawEnv.path("OPENCLAW_HOME") {
-            var urls = [
+            // OPENCLAW_HOME replaces the OS home; crossing back would mutate
+            // the real default profile during an isolated run.
+            return [
                 URL(fileURLWithPath: home, isDirectory: true)
                     .appendingPathComponent(".openclaw", isDirectory: true),
             ]
-            let osHomeURL = FileManager().homeDirectoryForCurrentUser
-                .appendingPathComponent(".openclaw", isDirectory: true)
-            if !urls.contains(where: {
-                $0.standardizedFileURL.path == osHomeURL.standardizedFileURL.path
-            }) {
-                urls.append(osHomeURL)
-            }
-            return urls
         }
         return [
             FileManager().homeDirectoryForCurrentUser
@@ -273,6 +267,13 @@ enum ExecApprovalsStore {
 
     private static func legacyFileURLIfPending() -> URL? {
         guard OpenClawEnv.path("OPENCLAW_STATE_DIR") != nil else { return nil }
+        // Named profiles are isolated. Bare state-dir relocation keeps the
+        // shipped migration for users who moved their primary state root.
+        if let profile = OpenClawEnv.path("OPENCLAW_PROFILE"),
+           profile.lowercased() != "default"
+        {
+            return nil
+        }
         let targetURL = self.fileURL()
         for stateDirURL in self.legacyStateDirURLs() {
             let legacyURL = stateDirURL

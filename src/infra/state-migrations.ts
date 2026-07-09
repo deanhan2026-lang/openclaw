@@ -12,6 +12,7 @@ import {
 } from "../channels/plugins/bundled.js";
 import type { ChannelLegacyStateMigrationPlan } from "../channels/plugins/types.core.js";
 import {
+  isNamedProfile,
   resolveLegacyStateDirs,
   resolveNewStateDir,
   resolveOAuthDir,
@@ -349,6 +350,7 @@ function detectLegacyExecApprovalsMigration(params: {
     targetPath,
     hasLegacy:
       Boolean(params.env.OPENCLAW_STATE_DIR?.trim()) &&
+      !isNamedProfile(params.env) &&
       path.resolve(sourcePath) !== path.resolve(targetPath) &&
       fileExists(sourcePath) &&
       !fileExists(targetPath),
@@ -2404,7 +2406,7 @@ function migrateLegacyPluginBindingApprovals(params: {
 }): { changes: string[]; warnings: string[] } {
   const changes: string[] = [];
   const warnings: string[] = [];
-  if (!fileExists(params.detected.sourcePath)) {
+  if (!params.detected.hasLegacy || !fileExists(params.detected.sourcePath)) {
     return { changes, warnings };
   }
   let approvals: LegacyPluginBindingApprovalEntry[];
@@ -4305,7 +4307,8 @@ export async function detectLegacyStateMigrations(params: {
   const pluginBindingApprovals = {
     sourcePath: resolveLegacyPluginBindingApprovalsPath(env, homedir),
   };
-  const hasPluginBindingApprovals = fileExists(pluginBindingApprovals.sourcePath);
+  const hasPluginBindingApprovals =
+    !isNamedProfile(env) && fileExists(pluginBindingApprovals.sourcePath);
   const currentConversationBindings = {
     sourcePath: resolveLegacyCurrentConversationBindingsPath(stateDir),
   };

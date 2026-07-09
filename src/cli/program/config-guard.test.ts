@@ -101,6 +101,7 @@ describe("ensureConfigReady", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-config-guard-"));
     tempRoots.push(root);
     setTestEnvValue("OPENCLAW_HOME", root);
+    deleteTestEnvValue("OPENCLAW_PROFILE");
     deleteTestEnvValue("OPENCLAW_STATE_DIR");
     return root;
   }
@@ -125,7 +126,7 @@ describe("ensureConfigReady", () => {
   }
 
   beforeEach(() => {
-    envSnapshot = captureEnv(["HOME", "OPENCLAW_HOME", "OPENCLAW_STATE_DIR"]);
+    envSnapshot = captureEnv(["HOME", "OPENCLAW_HOME", "OPENCLAW_PROFILE", "OPENCLAW_STATE_DIR"]);
     vi.clearAllMocks();
     resetConfigGuardStateForTests();
     for (const root of tempRoots.splice(0)) {
@@ -264,6 +265,17 @@ describe("ensureConfigReady", () => {
       migrateLegacyConfig: false,
       invalidConfigNote: false,
     });
+  });
+
+  it("does not route named profiles through default-profile approvals migration", async () => {
+    const root = useTempOpenClawHome();
+    setTestEnvValue("OPENCLAW_PROFILE", "work");
+    setTestEnvValue("OPENCLAW_STATE_DIR", path.join(root, ".openclaw-work"));
+    writeStateMarker(root, "exec-approvals.json");
+
+    await runEnsureConfigReady(["agent"]);
+
+    expect(loadAndMaybeMigrateDoctorConfigMock).not.toHaveBeenCalled();
   });
 
   it.each([

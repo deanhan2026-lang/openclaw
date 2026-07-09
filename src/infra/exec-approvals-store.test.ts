@@ -34,7 +34,7 @@ let resolveExecApprovalsTranscriptPath: ExecApprovalsModule["resolveExecApproval
 let saveExecApprovals: ExecApprovalsModule["saveExecApprovals"];
 
 const tempDirs: string[] = [];
-const testEnvSnapshot = captureEnv(["OPENCLAW_HOME", "OPENCLAW_STATE_DIR"]);
+const testEnvSnapshot = captureEnv(["OPENCLAW_HOME", "OPENCLAW_PROFILE", "OPENCLAW_STATE_DIR"]);
 
 beforeAll(async () => {
   ({
@@ -74,6 +74,7 @@ function createHomeDir(): string {
   const dir = makeTempDir();
   tempDirs.push(dir);
   setTestEnvValue("OPENCLAW_HOME", dir);
+  deleteTestEnvValue("OPENCLAW_PROFILE");
   deleteTestEnvValue("OPENCLAW_STATE_DIR");
   return dir;
 }
@@ -195,6 +196,32 @@ describe("exec approvals store helpers", () => {
       autoAllowSkills: undefined,
     });
     expect(fs.existsSync(stateApprovalsFilePath(stateDir))).toBe(false);
+  });
+
+  it("keeps named-profile approvals isolated from the default profile", () => {
+    const dir = createHomeDir();
+    const stateDir = path.join(dir, ".openclaw-work");
+    const defaultPath = approvalsFilePath(dir);
+    fs.mkdirSync(path.dirname(defaultPath), { recursive: true });
+    fs.writeFileSync(
+      defaultPath,
+      `${JSON.stringify({
+        version: 1,
+        socket: { token: "default-profile-token" },
+        defaults: { security: "full", ask: "off" },
+        agents: {},
+      })}\n`,
+      "utf8",
+    );
+    const defaultBefore = fs.readFileSync(defaultPath, "utf8");
+    setTestEnvValue("OPENCLAW_PROFILE", "work");
+    setTestEnvValue("OPENCLAW_STATE_DIR", stateDir);
+
+    const ensured = ensureExecApprovals();
+
+    expect(ensured.socket?.token).not.toBe("default-profile-token");
+    expect(fs.existsSync(stateApprovalsFilePath(stateDir))).toBe(true);
+    expect(fs.readFileSync(defaultPath, "utf8")).toBe(defaultBefore);
   });
 
   it("keeps the default approvals path when only legacy state exists", () => {
