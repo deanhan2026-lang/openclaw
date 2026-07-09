@@ -5,6 +5,7 @@ import { createStorageMock } from "../../test-helpers/storage.ts";
 import {
   loadChatComposerSnapshot,
   persistChatComposerState,
+  persistStoredChatComposerQueue,
   removeStoredChatComposerQueueItem,
   restoreChatComposerState,
 } from "./composer-persistence.ts";
@@ -282,6 +283,23 @@ describe("chat composer persistence", () => {
       draft: "keep this draft",
       queue: [{ id: "keep-me", text: "still queued", createdAt: 2 }],
     });
+  });
+
+  it("rejects a required reconnect item beyond the stored queue limit", () => {
+    const queue = Array.from(
+      { length: 51 },
+      (_, index): ChatQueueItem => ({
+        id: `queued-${index}`,
+        text: `message ${index}`,
+        createdAt: index,
+        sendState: "waiting-reconnect",
+      }),
+    );
+
+    expect(
+      persistStoredChatComposerQueue(createState(), "agent:lily:main", queue, "queued-50"),
+    ).toBe(false);
+    expect(loadChatComposerSnapshot(createState(), "agent:lily:main")).toBeNull();
   });
 
   it("does not restore steered messages tied to a previous active run", () => {

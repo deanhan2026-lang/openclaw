@@ -530,6 +530,9 @@ function cancelPendingSendBeforeRequest(
 
 type QueuedChatSendResult = "sent" | "pending" | "failed";
 
+const OFFLINE_QUEUE_STORAGE_ERROR =
+  "Could not store this message for reconnect. Free browser storage or reconnect before sending.";
+
 function ensureQueuedSendState(
   host: ChatHost,
   item: ChatQueueItem,
@@ -583,11 +586,21 @@ async function sendQueuedChatMessage(
   }
   const sessionKey = prepared.sessionKey ?? host.sessionKey;
   if (!host.connected || !host.client) {
-    updateQueuedMessageForSession(host, sessionKey, id, (item) => ({
+    const waiting = updateQueuedMessageForSession(host, sessionKey, id, (item) => ({
       ...item,
       sendState: "waiting-reconnect",
       sendError: undefined,
     }));
+    if (!waiting || !persistQueuedMessagesForSession(host, sessionKey, waiting.id)) {
+      cancelPendingSendBeforeRequest(host, waiting ?? prepared, {
+        previousDraft: opts?.previousDraft,
+        previousAttachments: opts?.previousAttachments,
+      });
+      if (visibleSessionMatches(host, sessionKey, prepared.agentId)) {
+        setChatError(host, OFFLINE_QUEUE_STORAGE_ERROR);
+      }
+      return "failed";
+    }
     return "pending";
   }
 
@@ -744,13 +757,25 @@ async function sendQueuedChatMessage(
   } catch (err) {
     const error = formatConnectError(err);
     if (isRecoverableChatSendError(err, error)) {
-      updateQueuedMessageForSession(host, sessionKey, id, (item) => ({
+      const waiting = updateQueuedMessageForSession(host, sessionKey, id, (item) => ({
         ...item,
         sendError: error,
         sendState: "waiting-reconnect",
       }));
+      const stored = Boolean(
+        waiting && persistQueuedMessagesForSession(host, sessionKey, waiting.id),
+      );
+      if (!stored && waiting) {
+        updateQueuedMessageForSession(host, sessionKey, id, (item) => ({
+          ...item,
+          sendError: OFFLINE_QUEUE_STORAGE_ERROR,
+        }));
+      }
       if (isVisibleSession()) {
-        setChatError(host, "Message will send when the Gateway reconnects.");
+        setChatError(
+          host,
+          stored ? "Message will send when the Gateway reconnects." : OFFLINE_QUEUE_STORAGE_ERROR,
+        );
       }
       recordChatSendTiming(host, prepared, "waiting-reconnect", prepared.sendSubmittedAtMs, {
         error,
@@ -786,7 +811,7 @@ async function sendChatMessageNow(
     refreshSessions?: boolean;
     submittedAtMs?: number;
   },
-) {
+): Promise<QueuedChatSendResult> {
   resetToolStream(host as unknown as Parameters<typeof resetToolStream>[0]);
   // Reset scroll state before sending to ensure auto-scroll works for the response
   resetChatScroll(host as unknown as Parameters<typeof resetChatScroll>[0]);
@@ -801,15 +826,15 @@ async function sendChatMessageNow(
           opts?.submittedAtMs,
         );
   if (!queued) {
-    return false;
+    return "failed";
   }
   const queuedSessionKey = queued.sessionKey ?? host.sessionKey;
   const result = await sendQueuedChatMessage(host, queued.id, {
     previousDraft: opts?.previousDraft,
     previousAttachments: opts?.previousAttachments,
   });
-  const ok = result === "sent";
-  if (ok && host.sessionKey === queuedSessionKey) {
+  const sent = result === "sent";
+  if (sent && host.sessionKey === queuedSessionKey) {
     setLastActiveSessionKey(
       host as unknown as Parameters<typeof setLastActiveSessionKey>[0],
       queuedSessionKey,
@@ -817,7 +842,7 @@ async function sendChatMessageNow(
     resetChatInputHistoryNavigation(host);
   }
   if (
-    ok &&
+    sent &&
     host.sessionKey === queuedSessionKey &&
     opts?.restoreDraft &&
     opts.previousDraft?.trim()
@@ -825,7 +850,7 @@ async function sendChatMessageNow(
     host.chatMessage = opts.previousDraft;
   }
   if (
-    ok &&
+    sent &&
     host.sessionKey === queuedSessionKey &&
     opts?.restoreAttachments &&
     opts.previousAttachments?.length
@@ -836,10 +861,10 @@ async function sendChatMessageNow(
   if (host.sessionKey === queuedSessionKey) {
     scheduleChatScroll(host as unknown as Parameters<typeof scheduleChatScroll>[0], true);
   }
-  if (ok && host.sessionKey === queuedSessionKey && !host.chatRunId) {
+  if (sent && host.sessionKey === queuedSessionKey && !host.chatRunId) {
     void flushChatQueue(host);
   }
-  return ok;
+  return result;
 }
 
 function attachmentSubmitSignature(attachment: ChatAttachment): string {
@@ -1051,11 +1076,12 @@ async function flushChatQueue(host: ChatHost) {
       });
       ok = true;
     } else {
-      ok = await sendChatMessageNow(host, next.text, {
+      const result = await sendChatMessageNow(host, next.text, {
         queueItemId: next.id,
         attachments: next.attachments,
         refreshSessions: next.refreshSessions,
       });
+      ok = result === "sent";
     }
   } catch (err) {
     setChatError(host, String(err));
@@ -1280,6 +1306,7 @@ export async function handleSendChat(
       return;
     }
 
+    let sendResult: QueuedChatSendResult;
     if (isChatBusy(host)) {
       updateQueuedMessage(host, queued.id, (item) => ({
         ...item,
@@ -1287,25 +1314,27 @@ export async function handleSendChat(
         sendState: undefined,
       }));
       recordChatSendTiming(host, queued, "queued-busy", submittedAtMs);
-      return;
+      sendResult = "pending";
+    } else {
+      sendResult = await sendChatMessageNow(host, effectiveMessage, {
+        queueItemId: queued.id,
+        previousDraft: cleared.previousDraft,
+        restoreDraft: Boolean(messageOverride && opts?.restoreDraft),
+        attachments: hasAttachments ? attachmentsToSend : undefined,
+        previousAttachments: cleared.previousAttachments,
+        restoreAttachments: Boolean(messageOverride && opts?.restoreDraft),
+        refreshSessions,
+        submittedAtMs,
+      });
     }
-
-    const accepted = await sendChatMessageNow(host, effectiveMessage, {
-      queueItemId: queued.id,
-      previousDraft: cleared.previousDraft,
-      restoreDraft: Boolean(messageOverride && opts?.restoreDraft),
-      attachments: hasAttachments ? attachmentsToSend : undefined,
-      previousAttachments: cleared.previousAttachments,
-      restoreAttachments: Boolean(messageOverride && opts?.restoreDraft),
-      refreshSessions,
-      submittedAtMs,
-    });
     if (
-      accepted &&
+      sendResult !== "failed" &&
       replyTarget &&
       host.chatReplyTarget?.messageId === replyTarget.messageId &&
       host.sessionKey === submittedSessionKey
     ) {
+      // A reconnect queue owns the quoted turn before the Gateway ACK. Consume
+      // its reply target so later offline turns cannot reuse stale context.
       host.chatReplyTarget = null;
     }
   });

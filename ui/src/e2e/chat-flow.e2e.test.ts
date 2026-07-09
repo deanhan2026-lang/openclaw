@@ -1894,6 +1894,94 @@ describeControlUiE2e("Control UI mocked Gateway E2E", () => {
     }
   });
 
+  it("stores new input while offline and sends it after reconnect", async () => {
+    const artifactDir = process.env.OPENCLAW_UI_E2E_ARTIFACT_DIR?.trim();
+    const context = await newBrowserContext({
+      locale: "en-US",
+      ...(artifactDir
+        ? { recordVideo: { dir: artifactDir, size: { height: 900, width: 1280 } } }
+        : {}),
+      serviceWorkers: "block",
+      viewport: { height: 900, width: 1280 },
+    });
+    const page = await context.newPage();
+    const gateway = await installMockGateway(page);
+
+    try {
+      await page.goto(`${server.baseUrl}chat`);
+      const composer = page.locator(".agent-chat__composer-combobox textarea");
+      await composer.waitFor({ state: "visible", timeout: 10_000 });
+
+      await gateway.setOnline(false);
+      await page.locator("openclaw-connection-banner").waitFor({ timeout: 10_000 });
+
+      const prompt = "send this when the Gateway returns";
+      const composerEnabled = await composer.isEnabled();
+      expect(composerEnabled).toBe(true);
+      await composer.fill(prompt);
+      const send = page.getByRole("button", { name: "Send message" });
+      const sendEnabled = await send.isEnabled();
+      expect(sendEnabled).toBe(true);
+      await send.click();
+
+      const queue = page.locator(".chat-queue");
+      await queue.getByText("Waiting for reconnect").waitFor({ timeout: 10_000 });
+      await queue.getByText(prompt).waitFor({ timeout: 10_000 });
+      const requestsBeforeReconnect = await gateway.getRequests("chat.send");
+      expect(requestsBeforeReconnect).toHaveLength(0);
+      const readStoredProof = () =>
+        page.evaluate((expectedPrompt) => {
+          const stored = Object.entries(sessionStorage)
+            .filter(([key]) => key.startsWith("openclaw.control.chatComposer.v1:"))
+            .map(([, value]) => value)
+            .join("\n");
+          return {
+            prompt: stored.includes(expectedPrompt),
+            waitingReconnect: stored.includes('"sendState":"waiting-reconnect"'),
+          };
+        }, prompt);
+      await expect.poll(readStoredProof).toEqual({ prompt: true, waitingReconnect: true });
+      const storedProof = await readStoredProof();
+      if (artifactDir) {
+        await page.screenshot({ path: `${artifactDir}/01-offline-queued.png`, fullPage: true });
+      }
+
+      await expect.poll(() => gateway.getSocketCount()).toBeGreaterThan(1);
+      await gateway.setOnline(true);
+
+      const request = await gateway.waitForRequest("chat.send");
+      const params = requireRecord(request.params);
+      const runId = requireString(params.idempotencyKey, "offline send idempotency key");
+      expect(params.message).toBe(prompt);
+      await expect.poll(async () => (await gateway.getRequests("chat.send")).length).toBe(1);
+      const requestsAfterReconnect = await gateway.getRequests("chat.send");
+      await gateway.emitChatFinal({ runId, text: "Delivered after reconnect." });
+      await queue.waitFor({ state: "detached", timeout: 10_000 });
+      await page.locator("openclaw-connection-banner").waitFor({ state: "detached" });
+      if (artifactDir) {
+        await page.screenshot({ path: `${artifactDir}/02-online-delivered.png`, fullPage: true });
+      }
+      if (process.env.OPENCLAW_BEHAVIOR_PROOF === "1") {
+        process.stdout.write(
+          `${JSON.stringify({
+            proof: "offline-chat-reconnect",
+            composerEnabled,
+            sendEnabled,
+            waitingStateVisible: true,
+            storedPrompt: storedProof.prompt,
+            storedWaitingState: storedProof.waitingReconnect,
+            requestsBeforeReconnect: requestsBeforeReconnect.length,
+            requestsAfterReconnect: requestsAfterReconnect.length,
+            idempotencyKeyPresent: runId.length > 0,
+            queueClearedAfterDelivery: true,
+          })}\n`,
+        );
+      }
+    } finally {
+      await closeBrowserContext(context);
+    }
+  });
+
   it("keeps a session model override selected after switching away and back", async () => {
     const context = await newBrowserContext({
       locale: "en-US",

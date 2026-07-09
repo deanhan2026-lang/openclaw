@@ -125,8 +125,17 @@ export function updateQueuedMessageForSession(
   return nextItem;
 }
 
-export function persistQueuedMessagesForSession(host: ChatQueueSessionHost, sessionKey: string) {
-  persistStoredChatComposerQueue(host, sessionKey, readChatQueueForSession(host, sessionKey));
+export function persistQueuedMessagesForSession(
+  host: ChatQueueSessionHost,
+  sessionKey: string,
+  requiredQueueItemId?: string,
+) {
+  return persistStoredChatComposerQueue(
+    host,
+    sessionKey,
+    readChatQueueForSession(host, sessionKey),
+    requiredQueueItemId,
+  );
 }
 
 export function removeQueuedMessageWithoutReleasing(

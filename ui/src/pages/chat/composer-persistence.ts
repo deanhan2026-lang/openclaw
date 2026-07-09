@@ -442,10 +442,11 @@ export function persistStoredChatComposerQueue(
   state: ChatComposerScope,
   sessionKey: string,
   queue: ChatQueueItem[],
-): void {
+  requiredQueueItemId?: string,
+): boolean {
   const storage = getSafeSessionStorage();
   if (!storage || !sessionKey.trim()) {
-    return;
+    return false;
   }
   try {
     const key = storageKeyForGateway(state.settings?.gatewayUrl);
@@ -456,6 +457,9 @@ export function persistStoredChatComposerQueue(
       .slice(0, MAX_STORED_QUEUE_ITEMS)
       .map(serializeQueueItem)
       .filter((item): item is ChatQueueItem => item !== null);
+    if (requiredQueueItemId && !serializedQueue.some((item) => item.id === requiredQueueItemId)) {
+      return false;
+    }
     if (!session?.draft && serializedQueue.length === 0) {
       delete store.sessions[storeSessionKey];
     } else {
@@ -466,8 +470,16 @@ export function persistStoredChatComposerQueue(
       };
     }
     writeStore(storage, key, store);
+    if (!requiredQueueItemId) {
+      return true;
+    }
+    const persistedSession = normalizeStoredSession(
+      readStore(storage, key).sessions[storeSessionKey],
+    );
+    return Boolean(persistedSession?.queue?.some((item) => item.id === requiredQueueItemId));
   } catch {
     // Best-effort only: queue persistence must not make send recovery fail.
+    return false;
   }
 }
 

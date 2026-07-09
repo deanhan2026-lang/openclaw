@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { GatewaySessionRow, SessionsListResult } from "../../api/types.ts";
 import type { UiSettings } from "../../app/settings.ts";
 import { createSessionCapability } from "../../lib/sessions/index.ts";
+import { createStorageMock } from "../../test-helpers/storage.ts";
 import {
   getChatAttachmentDataUrl,
   getChatAttachmentPreviewUrl,
@@ -1100,6 +1101,7 @@ describe("handleSendChat", () => {
   beforeEach(() => {
     executeSlashCommandMock.mockReset();
     setLastActiveSessionKeyMock.mockReset();
+    vi.stubGlobal("sessionStorage", createStorageMock());
   });
 
   afterEach(() => {
@@ -2614,6 +2616,60 @@ describe("handleSendChat", () => {
         }),
       ]),
     );
+  });
+
+  it("retains offline attachments when browser storage rejects the queue", async () => {
+    const storage = createStorageMock();
+    vi.spyOn(storage, "setItem").mockImplementation(() => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    });
+    vi.stubGlobal("sessionStorage", storage);
+    const attachment = {
+      id: "offline-attachment",
+      mimeType: "image/png",
+      fileName: "offline.png",
+      sizeBytes: 3,
+      dataUrl: "data:image/png;base64,AAA",
+    };
+    const host = makeHost({
+      client: null,
+      connected: false,
+      chatAttachments: [attachment],
+    });
+
+    await handleSendChat(host);
+
+    expect(host.chatAttachments).toEqual([attachment]);
+    expect(host.chatQueue).toStrictEqual([]);
+    expect(host.lastError).toBe(
+      "Could not store this message for reconnect. Free browser storage or reconnect before sending.",
+    );
+  });
+
+  it("consumes a reply target after queueing its turn offline", async () => {
+    const host = makeHost({
+      client: null,
+      connected: false,
+      chatMessage: "continue offline",
+      chatReplyTarget: {
+        messageId: "reply-source-offline",
+        text: "quoted body",
+        senderLabel: "User",
+      },
+    });
+
+    await handleSendChat(host);
+
+    expect(host.chatQueue[0]).toMatchObject({
+      text: "> **User:** quoted body\n\ncontinue offline",
+      sendState: "waiting-reconnect",
+    });
+    expect(host.chatReplyTarget).toBeNull();
+
+    host.chatMessage = "next offline turn";
+    await handleSendChat(host);
+
+    expect(host.chatQueue[1]?.text).toBe("next offline turn");
   });
 
   it("replays queued global sends under the originally selected agent", async () => {

@@ -1092,6 +1092,31 @@ describe("chat goal status", () => {
 });
 
 describe("chat composer workbench", () => {
+  it("queues ordinary input offline while keeping live commands disabled", () => {
+    const onSend = vi.fn();
+    const container = renderChatView({
+      connected: false,
+      draft: "queue this offline",
+      getDraft: () => "queue this offline",
+      onSend,
+    });
+
+    expect(container.querySelector<HTMLTextAreaElement>("textarea")?.disabled).toBe(false);
+    expect(container.querySelector<HTMLInputElement>(".agent-chat__file-input")?.disabled).toBe(
+      false,
+    );
+    const send = container.querySelector<HTMLButtonElement>('button[aria-label="Send message"]');
+    expect(send?.disabled).toBe(false);
+    send?.click();
+    expect(onSend).toHaveBeenCalledTimes(1);
+
+    const commandContainer = renderChatView({ connected: false, draft: "/status" });
+    expect(
+      commandContainer.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')
+        ?.disabled,
+    ).toBe(true);
+  });
+
   it("renders session controls in the composer and workspace files in the expanded rail", () => {
     const onToggleCollapsed = vi.fn();
     const onRefresh = vi.fn();
@@ -2397,6 +2422,41 @@ describe("chat slash menu accessibility", () => {
     await Promise.resolve();
 
     expect(container.querySelector(".slash-menu")).toBeNull();
+  });
+
+  it("does not submit a stale slash argument menu after disconnect", () => {
+    let draft = "";
+    const onDraftChange = vi.fn((next: string) => {
+      draft = next;
+    });
+    const onSend = vi.fn();
+    const container = document.createElement("div");
+    const renderCurrent = (connected: boolean) => {
+      render(
+        renderChat(
+          createChatProps({
+            connected,
+            draft,
+            getDraft: () => draft,
+            onDraftChange,
+            onSend,
+          }),
+        ),
+        container,
+      );
+    };
+
+    renderCurrent(true);
+    inputDraft(container, "/tools ");
+    renderCurrent(true);
+    expect(container.querySelector(".slash-menu")).not.toBeNull();
+
+    renderCurrent(false);
+    expect(container.querySelector(".slash-menu")).toBeNull();
+    keydownComposer(container, "Enter");
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(draft).toBe("/tools ");
   });
 
   it("clears the visible local draft immediately when send clears the host draft", () => {
