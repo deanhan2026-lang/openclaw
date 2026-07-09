@@ -7,6 +7,8 @@ import {
 import { CrestodianChatEngine } from "../../crestodian/chat-engine.js";
 import { buildOnboardingWelcome } from "../../crestodian/onboarding-welcome.js";
 import { formatCrestodianStartupMessage } from "../../crestodian/overview.js";
+import { enqueueCommandInLane, setCommandLaneConcurrency } from "../../process/command-queue.js";
+import { CommandLane } from "../../process/lanes.js";
 import { defaultRuntime } from "../../runtime.js";
 import type { GatewayRequestHandlers } from "./types.js";
 import { assertValidParams } from "./validation.js";
@@ -28,6 +30,13 @@ export type CrestodianChatSession = {
 };
 
 const MAX_CRESTODIAN_SESSIONS = 8;
+
+async function runCrestodianGatewayTask(task: () => Promise<void>): Promise<void> {
+  // Track every accepted RPC as active, never queued: restart draining snapshots
+  // active ids, so a queued Crestodian request could otherwise outlive its socket.
+  setCommandLaneConcurrency(CommandLane.Crestodian, Number.MAX_SAFE_INTEGER);
+  await enqueueCommandInLane(CommandLane.Crestodian, task);
+}
 
 async function evictOldestSession(sessions: Map<string, CrestodianChatSession>): Promise<void> {
   if (sessions.size < MAX_CRESTODIAN_SESSIONS) {
@@ -60,8 +69,10 @@ export const crestodianHandlers: GatewayRequestHandlers = {
     ) {
       return;
     }
-    const { detectSetupInference } = await import("../../crestodian/setup-inference.js");
-    respond(true, await detectSetupInference(), undefined);
+    await runCrestodianGatewayTask(async () => {
+      const { detectSetupInference } = await import("../../crestodian/setup-inference.js");
+      respond(true, await detectSetupInference(), undefined);
+    });
   },
   /**
    * Structured onboarding: live-test one candidate and persist it on success.
@@ -79,82 +90,86 @@ export const crestodianHandlers: GatewayRequestHandlers = {
     ) {
       return;
     }
-    const { activateSetupInference } = await import("../../crestodian/setup-inference.js");
-    const runtime = {
-      ...defaultRuntime,
-      // Setup runs inside the gateway process; a failing sub-step must reject
-      // the RPC, never exit the daemon.
-      exit: (code: number | undefined): never => {
-        throw new Error(`setup step exited with code ${String(code)}`);
-      },
-    };
-    const result = await activateSetupInference({
-      kind: params.kind,
-      ...(params.authChoice !== undefined ? { authChoice: params.authChoice } : {}),
-      ...(params.apiKey !== undefined ? { apiKey: params.apiKey } : {}),
-      ...(params.workspace !== undefined ? { workspace: params.workspace } : {}),
-      surface: "gateway",
-      runtime,
+    await runCrestodianGatewayTask(async () => {
+      const { activateSetupInference } = await import("../../crestodian/setup-inference.js");
+      const runtime = {
+        ...defaultRuntime,
+        // Setup runs inside the gateway process; a failing sub-step must reject
+        // the RPC, never exit the daemon.
+        exit: (code: number | undefined): never => {
+          throw new Error(`setup step exited with code ${String(code)}`);
+        },
+      };
+      const result = await activateSetupInference({
+        kind: params.kind,
+        ...(params.authChoice !== undefined ? { authChoice: params.authChoice } : {}),
+        ...(params.apiKey !== undefined ? { apiKey: params.apiKey } : {}),
+        ...(params.workspace !== undefined ? { workspace: params.workspace } : {}),
+        surface: "gateway",
+        runtime,
+      });
+      respond(true, result, undefined);
     });
-    respond(true, result, undefined);
   },
   "crestodian.chat": async ({ params, respond, context }) => {
     if (!assertValidParams(params, validateCrestodianChatParams, "crestodian.chat", respond)) {
       return;
     }
-    const sessions = context.crestodianSessions;
-    const sessionId = params.sessionId;
-    if (params.reset) {
-      await sessions.get(sessionId)?.engine.dispose();
-      sessions.delete(sessionId);
-    }
-    let session = sessions.get(sessionId);
-    if (!session) {
-      // The gateway surface must never install/restart its own daemon; the
-      // engine's setup path honors this via surface: "gateway".
-      const engine = new CrestodianChatEngine({ surface: "gateway" });
-      let welcome: string;
-      if (params.welcomeVariant === "onboarding") {
-        welcome = await buildOnboardingWelcome({ engine });
-      } else {
-        welcome = formatCrestodianStartupMessage(await engine.loadOverview());
-        engine.noteAssistantMessage(welcome);
+    await runCrestodianGatewayTask(async () => {
+      const sessions = context.crestodianSessions;
+      const sessionId = params.sessionId;
+      if (params.reset) {
+        await sessions.get(sessionId)?.engine.dispose();
+        sessions.delete(sessionId);
       }
-      await evictOldestSession(sessions);
-      session = { engine, welcome, lastUsedAt: Date.now() };
-      sessions.set(sessionId, session);
+      let session = sessions.get(sessionId);
+      if (!session) {
+        // The gateway surface must never install/restart its own daemon; the
+        // engine's setup path honors this via surface: "gateway".
+        const engine = new CrestodianChatEngine({ surface: "gateway" });
+        let welcome: string;
+        if (params.welcomeVariant === "onboarding") {
+          welcome = await buildOnboardingWelcome({ engine });
+        } else {
+          welcome = formatCrestodianStartupMessage(await engine.loadOverview());
+          engine.noteAssistantMessage(welcome);
+        }
+        await evictOldestSession(sessions);
+        session = { engine, welcome, lastUsedAt: Date.now() };
+        sessions.set(sessionId, session);
+        if (params.message === undefined || !params.message.trim()) {
+          respond(true, { sessionId, reply: session.welcome, action: "none" }, undefined);
+          return;
+        }
+      }
+      session.lastUsedAt = Date.now();
       if (params.message === undefined || !params.message.trim()) {
         respond(true, { sessionId, reply: session.welcome, action: "none" }, undefined);
         return;
       }
-    }
-    session.lastUsedAt = Date.now();
-    if (params.message === undefined || !params.message.trim()) {
-      respond(true, { sessionId, reply: session.welcome, action: "none" }, undefined);
-      return;
-    }
-    const reply = await session.engine.handle(params.message);
-    // The TUI-only "open-tui" handoff becomes a client-visible "open-agent"
-    // signal: the app should move the user to their normal agent chat.
-    const action =
-      reply.action === "open-tui"
-        ? "open-agent"
-        : reply.action === "open-setup"
-          ? "none"
-          : reply.action;
-    respond(
-      true,
-      {
-        sessionId,
-        reply:
-          reply.text ||
-          (action === "open-agent"
-            ? "Setup here is done — continue with your agent."
-            : "Nothing to change."),
-        action,
-        ...(reply.sensitive === true ? { sensitive: true } : {}),
-      },
-      undefined,
-    );
+      const reply = await session.engine.handle(params.message);
+      // The TUI-only "open-tui" handoff becomes a client-visible "open-agent"
+      // signal: the app should move the user to their normal agent chat.
+      const action =
+        reply.action === "open-tui"
+          ? "open-agent"
+          : reply.action === "open-setup"
+            ? "none"
+            : reply.action;
+      respond(
+        true,
+        {
+          sessionId,
+          reply:
+            reply.text ||
+            (action === "open-agent"
+              ? "Setup here is done — continue with your agent."
+              : "Nothing to change."),
+          action,
+          ...(reply.sensitive === true ? { sensitive: true } : {}),
+        },
+        undefined,
+      );
+    });
   },
 };

@@ -407,6 +407,12 @@ export class CrestodianChatEngine {
     if (typed.kind === "config-set" && isSensitiveConfigPath(typed.path)) {
       return await this.runOperation(typed, undefined);
     }
+    if (typed.kind === "open-tui") {
+      // Exact host navigation must not depend on whether a conversation model
+      // chooses to call the handoff tool. Clear any stale proposal first.
+      this.clearPendingProposals();
+      return await this.runOperation(typed, undefined);
+    }
 
     // Approval is judged from the user's own words, host-side. The classifier
     // only runs while a proposal is pending, and "other" (questions, new

@@ -1,8 +1,23 @@
 // crestodian.chat handler tests: session reuse, reset, and action mapping.
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CrestodianChatEngine } from "../../crestodian/chat-engine.js";
+import {
+  getCommandLaneSnapshot,
+  resetCommandQueueStateForTest,
+} from "../../process/command-queue.js";
+import { CommandLane } from "../../process/lanes.js";
+import { createDeferred } from "../../test-utils/deferred.js";
 import { crestodianHandlers, type CrestodianChatSession } from "./crestodian.js";
 import type { GatewayRequestContext } from "./types.js";
+
+const setupInferenceMocks = vi.hoisted(() => ({
+  detectSetupInference: vi.fn(),
+}));
+
+vi.mock("../../crestodian/setup-inference.js", () => ({
+  activateSetupInference: vi.fn(),
+  detectSetupInference: setupInferenceMocks.detectSetupInference,
+}));
 
 type RespondCall = {
   ok: boolean;
@@ -31,6 +46,11 @@ function seededSession(overrides?: Partial<CrestodianChatSession>): CrestodianCh
   };
 }
 
+afterEach(() => {
+  setupInferenceMocks.detectSetupInference.mockReset();
+  resetCommandQueueStateForTest();
+});
+
 async function callChat(
   context: GatewayRequestContext,
   params: Record<string, unknown>,
@@ -49,6 +69,37 @@ async function callChat(
 }
 
 describe("crestodian.chat", () => {
+  it("tracks setup detection until its RPC response is sent", async () => {
+    const started = createDeferred();
+    const release = createDeferred();
+    setupInferenceMocks.detectSetupInference.mockImplementation(async () => {
+      started.resolve();
+      await release.promise;
+      return {
+        candidates: [],
+        manualProviders: [],
+        workspace: "/tmp/work",
+        setupComplete: false,
+      };
+    });
+    const activeAtResponse: number[] = [];
+
+    const pending = crestodianHandlers["crestodian.setup.detect"]({
+      params: {},
+      respond: () => {
+        activeAtResponse.push(getCommandLaneSnapshot(CommandLane.Crestodian).activeCount);
+      },
+    } as never);
+
+    await started.promise;
+    expect(getCommandLaneSnapshot(CommandLane.Crestodian).activeCount).toBe(1);
+    release.resolve();
+    await pending;
+
+    expect(activeAtResponse).toEqual([1]);
+    expect(getCommandLaneSnapshot(CommandLane.Crestodian).activeCount).toBe(0);
+  });
+
   it("rejects invalid params", async () => {
     const call = await callChat(makeContext(new Map()), {});
     expect(call.ok).toBe(false);
@@ -72,6 +123,59 @@ describe("crestodian.chat", () => {
 
     expect(handle).toHaveBeenCalledWith("status");
     expect(call.payload).toMatchObject({ reply: "did the thing", action: "none" });
+  });
+
+  it("tracks concurrent requests as active until each RPC response is sent", async () => {
+    const firstStarted = createDeferred();
+    const secondStarted = createDeferred();
+    const releaseFirst = createDeferred();
+    const releaseSecond = createDeferred();
+    const firstEngine = new CrestodianChatEngine({});
+    vi.spyOn(firstEngine, "handle").mockImplementation(async () => {
+      firstStarted.resolve();
+      await releaseFirst.promise;
+      return { text: "first setup complete", action: "none" };
+    });
+    const secondEngine = new CrestodianChatEngine({});
+    vi.spyOn(secondEngine, "handle").mockImplementation(async () => {
+      secondStarted.resolve();
+      await releaseSecond.promise;
+      return { text: "second setup complete", action: "none" };
+    });
+    const sessions = new Map<string, CrestodianChatSession>([
+      ["s1", seededSession({ engine: firstEngine })],
+      ["s2", seededSession({ engine: secondEngine })],
+    ]);
+    const activeAtResponse: number[] = [];
+
+    const first = crestodianHandlers["crestodian.chat"]({
+      params: { sessionId: "s1", message: "yes" },
+      context: makeContext(sessions),
+      respond: () => {
+        activeAtResponse.push(getCommandLaneSnapshot(CommandLane.Crestodian).activeCount);
+      },
+    } as never);
+    const second = crestodianHandlers["crestodian.chat"]({
+      params: { sessionId: "s2", message: "yes" },
+      context: makeContext(sessions),
+      respond: () => {
+        activeAtResponse.push(getCommandLaneSnapshot(CommandLane.Crestodian).activeCount);
+      },
+    } as never);
+
+    await Promise.all([firstStarted.promise, secondStarted.promise]);
+    expect(getCommandLaneSnapshot(CommandLane.Crestodian)).toMatchObject({
+      activeCount: 2,
+      queuedCount: 0,
+    });
+    releaseFirst.resolve();
+    await first;
+    expect(getCommandLaneSnapshot(CommandLane.Crestodian).activeCount).toBe(1);
+    releaseSecond.resolve();
+    await second;
+
+    expect(activeAtResponse).toEqual([2, 1]);
+    expect(getCommandLaneSnapshot(CommandLane.Crestodian).activeCount).toBe(0);
   });
 
   it("forwards sensitive-input metadata to clients", async () => {
