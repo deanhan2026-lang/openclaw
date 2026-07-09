@@ -1548,6 +1548,11 @@ deterministic chart data as text unless they advertise native chart support. If
 Slack rejects the chart with `invalid_blocks` during a phased rollout, OpenClaw
 retries once with the text representation and no blocks.
 
+Slack currently accepts up to two `data_visualization` blocks per message. When
+a presentation contains more than two valid charts, OpenClaw renders the first
+two natively and preserves each additional chart as deterministic visible text
+in the same message.
+
 Slack's [developer launch](https://docs.slack.dev/changelog/2026/06/16/block-kit-data-visualization-block/)
 documents the block as an app-facing Block Kit feature and publishes no paid
 plan restriction. The Business+/Enterprise eligibility language applies to

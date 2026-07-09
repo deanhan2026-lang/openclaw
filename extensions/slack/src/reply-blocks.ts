@@ -8,7 +8,7 @@ import { parseSlackBlocksInput, SLACK_MAX_BLOCKS } from "./blocks-input.js";
 import {
   buildSlackInteractiveBlocks,
   buildSlackPresentationBlocks,
-  resolveSlackInteractiveBlockOffsets,
+  resolveSlackBlockOffsets,
   type SlackBlock,
 } from "./blocks-render.js";
 
@@ -28,11 +28,11 @@ export function resolveSlackReplyBlocks(payload: ReplyPayload): SlackBlock[] | u
   }
   const presentationBlocks = buildSlackPresentationBlocks(
     payload.presentation,
-    resolveSlackInteractiveBlockOffsets(channelBlocks),
+    resolveSlackBlockOffsets(channelBlocks),
   );
   const interactiveBlocks = buildSlackInteractiveBlocks(
     payload.interactive,
-    resolveSlackInteractiveBlockOffsets([...channelBlocks, ...presentationBlocks]),
+    resolveSlackBlockOffsets([...channelBlocks, ...presentationBlocks]),
   );
   const blocks = [...channelBlocks, ...presentationBlocks, ...interactiveBlocks];
   if (blocks.length > SLACK_MAX_BLOCKS) {

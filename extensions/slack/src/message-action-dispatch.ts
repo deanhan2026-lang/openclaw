@@ -18,7 +18,7 @@ import { resolveDefaultSlackAccountId } from "./accounts.js";
 import {
   buildSlackInteractiveBlocks,
   buildSlackPresentationBlocks,
-  resolveSlackInteractiveBlockOffsets,
+  resolveSlackBlockOffsets,
 } from "./blocks-render.js";
 
 type SlackActionInvoke = (
@@ -67,10 +67,7 @@ export async function handleSlackMessageAction(params: {
       ? buildSlackPresentationBlocks(presentation)
       : undefined;
     const interactiveBlocks = interactive
-      ? buildSlackInteractiveBlocks(
-          interactive,
-          resolveSlackInteractiveBlockOffsets(presentationBlocks),
-        )
+      ? buildSlackInteractiveBlocks(interactive, resolveSlackBlockOffsets(presentationBlocks))
       : undefined;
     const mergedBlocks = [...(presentationBlocks ?? []), ...(interactiveBlocks ?? [])];
     const blocks = mergedBlocks.length > 0 ? mergedBlocks : undefined;

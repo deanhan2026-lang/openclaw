@@ -25,7 +25,7 @@ import {
   buildSlackInteractiveBlocks,
   buildSlackPresentationBlocks,
   canRenderSlackPresentation,
-  resolveSlackInteractiveBlockOffsets,
+  resolveSlackBlockOffsets,
   type SlackBlock,
 } from "./blocks-render.js";
 import { markdownToSlackMrkdwnChunks } from "./format.js";
@@ -56,10 +56,7 @@ function resolveRenderedInteractiveBlocks(
   if (!interactive) {
     return undefined;
   }
-  const blocks = buildSlackInteractiveBlocks(
-    interactive,
-    resolveSlackInteractiveBlockOffsets(previousBlocks),
-  );
+  const blocks = buildSlackInteractiveBlocks(interactive, resolveSlackBlockOffsets(previousBlocks));
   return blocks.length > 0 ? blocks : undefined;
 }
 
@@ -230,7 +227,7 @@ function resolveSlackBlocks(payload: {
           ...buildSlackVisiblePayloadTextBlocks(payload),
           ...buildSlackPresentationBlocks(
             payload.presentation,
-            resolveSlackInteractiveBlockOffsets(nativeBlocks),
+            resolveSlackBlockOffsets(nativeBlocks),
           ),
         ]
       : []);
@@ -270,10 +267,7 @@ export const slackOutbound: ChannelOutboundAdapter = {
     if (canRenderSlackPresentation(presentation)) {
       const presentationBlocks = [
         ...payloadTextBlocks,
-        ...buildSlackPresentationBlocks(
-          presentation,
-          resolveSlackInteractiveBlockOffsets(nativeBlocks),
-        ),
+        ...buildSlackPresentationBlocks(presentation, resolveSlackBlockOffsets(nativeBlocks)),
       ];
       const previousBlocks = [...(nativeBlocks ?? []), ...presentationBlocks];
       const interactiveBlocks = resolveRenderedInteractiveBlocks(
