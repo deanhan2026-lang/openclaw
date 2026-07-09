@@ -294,6 +294,7 @@ describe("ensureOnboardingPluginInstalled", () => {
           progress,
         } as never,
         runtime: { error: vi.fn() } as never,
+        acknowledgeNonClawHubInstall: true,
       });
 
       expect(progress).toHaveBeenCalledWith("正在安装 Demo Plugin 插件...");
@@ -397,6 +398,7 @@ describe("ensureOnboardingPluginInstalled", () => {
       } as never,
       runtime: { log: vi.fn() } as never,
       workspaceDir: "/tmp/workspace",
+      acknowledgeNonClawHubInstall: true,
     });
 
     expect(select).not.toHaveBeenCalled();
@@ -538,6 +540,7 @@ describe("ensureOnboardingPluginInstalled", () => {
         progress: vi.fn(() => ({ update, stop })),
       } as never,
       runtime: {} as never,
+      acknowledgeNonClawHubInstall: true,
     });
 
     const [clawHubCall] = readFirstMockCall(
@@ -693,6 +696,7 @@ describe("ensureOnboardingPluginInstalled", () => {
         progress: vi.fn(() => ({ update, stop })),
       } as never,
       runtime: {} as never,
+      acknowledgeNonClawHubInstall: true,
     });
 
     const [npmCall] = readFirstMockCall(installPluginFromNpmSpec, "installPluginFromNpmSpec") as [
@@ -767,6 +771,7 @@ describe("ensureOnboardingPluginInstalled", () => {
       } as never,
       runtime: {} as never,
       promptInstall: false,
+      acknowledgeNonClawHubInstall: true,
     });
 
     const [npmCall] = readFirstMockCall(installPluginFromNpmSpec, "installPluginFromNpmSpec") as [
@@ -810,6 +815,7 @@ describe("ensureOnboardingPluginInstalled", () => {
       } as never,
       runtime: {} as never,
       promptInstall: false,
+      acknowledgeNonClawHubInstall: true,
     });
 
     const [, recordUpdate] = readFirstMockCall(recordPluginInstall, "recordPluginInstall") as [
@@ -852,6 +858,7 @@ describe("ensureOnboardingPluginInstalled", () => {
         progress: vi.fn(() => ({ update, stop })),
       } as never,
       runtime: { log } as never,
+      acknowledgeNonClawHubInstall: true,
     });
 
     expect(update).toHaveBeenCalledWith("Retrying");
@@ -884,6 +891,7 @@ describe("ensureOnboardingPluginInstalled", () => {
       runtime: {
         error: vi.fn(),
       } as never,
+      acknowledgeNonClawHubInstall: true,
     });
 
     expect(result).toEqual({
@@ -937,6 +945,44 @@ describe("ensureOnboardingPluginInstalled", () => {
       { value: "skip", label: "Skip for now" },
     ]);
     expect(captured?.initialValue).toBe("npm");
+    expect(installPluginFromNpmSpec).not.toHaveBeenCalled();
+  });
+
+  it("blocks automatic npm installs until non-ClawHub source acknowledgement is available", async () => {
+    const log = vi.fn();
+    const error = vi.fn();
+
+    const result = await ensureOnboardingPluginInstalled({
+      cfg: {},
+      entry: {
+        pluginId: "demo-plugin",
+        label: "Demo Plugin",
+        install: {
+          npmSpec: "@demo/plugin@1.2.3",
+        },
+      },
+      prompter: {
+        confirm: vi.fn(async () => {
+          throw new Error("non-interactive setup cannot prompt");
+        }),
+      } as never,
+      runtime: { error, log } as never,
+      promptInstall: false,
+    });
+
+    expect(result).toEqual({
+      cfg: {},
+      installed: false,
+      pluginId: "demo-plugin",
+      status: "failed",
+    });
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining("outside ClawHub review and trust metadata"),
+    );
+    expect(error).toHaveBeenCalledWith("non-interactive setup cannot prompt");
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("--acknowledge-non-clawhub-install"),
+    );
     expect(installPluginFromNpmSpec).not.toHaveBeenCalled();
   });
 

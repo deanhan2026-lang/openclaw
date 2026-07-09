@@ -9,6 +9,10 @@ import path from "node:path";
 import { uniqueStrings } from "@openclaw/normalization-core/string-normalization";
 import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { sanitizeTerminalText } from "../../packages/terminal-core/src/safe-text.js";
+import {
+  formatNonClawHubInstallWarning,
+  NON_CLAWHUB_INSTALL_ACK_FLAG,
+} from "../cli/non-clawhub-install-acknowledgement.js";
 import { resolveBundledInstallPlanForCatalogEntry } from "../cli/plugin-install-plan.js";
 import { invalidatePluginRuntimeDiscoveryAfterConfigMutation } from "../cli/plugins-registry-refresh.js";
 import { assertConfigWriteAllowedInCurrentMode } from "../config/nix-mode-write-guard.js";
@@ -1099,6 +1103,7 @@ export async function ensureOnboardingPluginInstalled(params: {
   workspaceDir?: string;
   promptInstall?: boolean;
   autoConfirmSingleSource?: boolean;
+  acknowledgeNonClawHubInstall?: boolean;
 }): Promise<OnboardingPluginInstallResult> {
   const { entry, prompter, runtime, workspaceDir } = params;
   let next = params.cfg;
@@ -1343,6 +1348,36 @@ export async function ensureOnboardingPluginInstalled(params: {
       pluginId: entry.pluginId,
       status: "failed",
     };
+  }
+
+  const nonClawHubWarning = formatNonClawHubInstallWarning({
+    sourceClass: "npm",
+    spec: npmInstallSpec,
+  });
+  if (params.acknowledgeNonClawHubInstall) {
+    runtime.log?.(nonClawHubWarning);
+  } else {
+    runtime.log?.(nonClawHubWarning);
+    let acknowledged = false;
+    try {
+      acknowledged = await prompter.confirm({
+        message: "Install this non-ClawHub plugin source?",
+        initialValue: false,
+      });
+    } catch (error) {
+      runtime.error?.(error instanceof Error ? error.message : String(error));
+    }
+    if (!acknowledged) {
+      runtime.error?.(
+        `Install cancelled; install the plugin with ${sanitizeTerminalText(`openclaw plugins install npm:${npmInstallSpec} ${NON_CLAWHUB_INSTALL_ACK_FLAG}`)} after reviewing the source, then rerun setup.`,
+      );
+      return {
+        cfg: next,
+        installed: false,
+        pluginId: entry.pluginId,
+        status: "failed",
+      };
+    }
   }
 
   const installOutcome = await installPluginFromNpmSpecWithProgress({
