@@ -489,12 +489,31 @@ function restoreComposerAfterFailedSend(
   }
 }
 
+type PendingComposerSnapshot = {
+  previousAttachments?: ChatAttachment[];
+  previousDraft?: string;
+};
+
+function pendingComposerRestorePlan(host: ChatHost, snapshot: PendingComposerSnapshot) {
+  const willRestoreDraft = snapshot.previousDraft != null && !host.chatMessage.trim();
+  const willRestoreAttachments = Boolean(
+    snapshot.previousAttachments?.length &&
+    host.chatAttachments.length === 0 &&
+    (willRestoreDraft || !host.chatMessage.trim()),
+  );
+  return {
+    complete:
+      (!snapshot.previousDraft?.trim() || willRestoreDraft) &&
+      (!snapshot.previousAttachments?.length || willRestoreAttachments),
+    willRestoreAttachments,
+    willRestoreDraft,
+  };
+}
+
 function cancelPendingSendBeforeRequest(
   host: ChatHost,
   queued: ChatQueueItem,
-  opts: {
-    previousAttachments?: ChatAttachment[];
-    previousDraft?: string;
+  opts: PendingComposerSnapshot & {
     restoreComposer?: boolean;
   },
 ) {
@@ -504,14 +523,9 @@ function cancelPendingSendBeforeRequest(
     queued.sessionKey,
   );
   const restoreComposer = opts.restoreComposer !== false && removed != null;
-  const willRestoreDraft =
-    restoreComposer && opts.previousDraft != null && !host.chatMessage.trim();
-  const willRestoreAttachments = Boolean(
-    restoreComposer &&
-    opts.previousAttachments?.length &&
-    host.chatAttachments.length === 0 &&
-    (willRestoreDraft || !host.chatMessage.trim()),
-  );
+  const restorePlan = pendingComposerRestorePlan(host, opts);
+  const willRestoreDraft = restoreComposer && restorePlan.willRestoreDraft;
+  const willRestoreAttachments = restoreComposer && restorePlan.willRestoreAttachments;
   if (restoreComposer) {
     if (willRestoreDraft) {
       host.chatMessage = opts.previousDraft ?? "";
@@ -765,17 +779,33 @@ async function sendQueuedChatMessage(
       const stored = Boolean(
         waiting && persistQueuedMessagesForSession(host, sessionKey, waiting.id),
       );
-      if (!stored && waiting) {
-        updateQueuedMessageForSession(host, sessionKey, id, (item) => ({
-          ...item,
-          sendError: OFFLINE_QUEUE_STORAGE_ERROR,
-        }));
+      if (!stored) {
+        const hasComposerSnapshot =
+          opts?.previousDraft !== undefined || opts?.previousAttachments !== undefined;
+        // Remove the queue item only when its full payload can be restored
+        // without overwriting newer composer input.
+        if (hasComposerSnapshot && pendingComposerRestorePlan(host, opts ?? {}).complete) {
+          cancelPendingSendBeforeRequest(host, waiting ?? prepared, {
+            previousDraft: opts?.previousDraft,
+            previousAttachments: opts?.previousAttachments,
+          });
+        } else {
+          updateQueuedMessageForSession(host, sessionKey, id, (item) => ({
+            ...item,
+            sendError: OFFLINE_QUEUE_STORAGE_ERROR,
+            sendState: "failed",
+          }));
+        }
+        if (isVisibleSession()) {
+          setChatError(host, OFFLINE_QUEUE_STORAGE_ERROR);
+        }
+        recordChatSendTiming(host, prepared, "failed", prepared.sendSubmittedAtMs, {
+          error: OFFLINE_QUEUE_STORAGE_ERROR,
+        });
+        return "failed";
       }
       if (isVisibleSession()) {
-        setChatError(
-          host,
-          stored ? "Message will send when the Gateway reconnects." : OFFLINE_QUEUE_STORAGE_ERROR,
-        );
+        setChatError(host, "Message will send when the Gateway reconnects.");
       }
       recordChatSendTiming(host, prepared, "waiting-reconnect", prepared.sendSubmittedAtMs, {
         error,

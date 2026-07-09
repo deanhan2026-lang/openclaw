@@ -2589,6 +2589,74 @@ describe("handleSendChat", () => {
     expect(host.lastError).toBe("Message will send when the Gateway reconnects.");
   });
 
+  it("restores a pre-ack send when browser storage rejects the reconnect queue", async () => {
+    const storage = createStorageMock();
+    vi.spyOn(storage, "setItem").mockImplementation(() => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    });
+    vi.stubGlobal("sessionStorage", storage);
+    const request = vi.fn((method: string) => {
+      if (method === "chat.send") {
+        throw new Error("gateway closed (1006): network lost");
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    const replyTarget = {
+      messageId: "reply-before-ack",
+      text: "quoted body",
+      senderLabel: "User",
+    };
+    const host = makeHost({
+      client: { request } as unknown as ChatHost["client"],
+      chatMessage: "retry after reconnect",
+      chatReplyTarget: replyTarget,
+    });
+
+    await handleSendChat(host);
+
+    expect(host.chatMessage).toBe("retry after reconnect");
+    expect(host.chatQueue).toStrictEqual([]);
+    expect(host.chatReplyTarget).toEqual(replyTarget);
+    expect(host.lastError).toBe(
+      "Could not store this message for reconnect. Free browser storage or reconnect before sending.",
+    );
+  });
+
+  it("keeps a pre-ack send queued when newer composer input blocks restoration", async () => {
+    const storage = createStorageMock();
+    vi.spyOn(storage, "setItem").mockImplementation(() => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    });
+    vi.stubGlobal("sessionStorage", storage);
+    const sent = createDeferred<unknown>();
+    const request = vi.fn((method: string) => {
+      if (method === "chat.send") {
+        return sent.promise;
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    const host = makeHost({
+      client: { request } as unknown as ChatHost["client"],
+      chatMessage: "original send",
+    });
+
+    const send = handleSendChat(host);
+    await Promise.resolve();
+    host.chatMessage = "new draft";
+    sent.reject(new Error("gateway closed (1006): network lost"));
+    await send;
+
+    expect(host.chatMessage).toBe("new draft");
+    expect(host.chatQueue).toEqual([
+      expect.objectContaining({
+        text: "original send",
+        sendError:
+          "Could not store this message for reconnect. Free browser storage or reconnect before sending.",
+        sendState: "failed",
+      }),
+    ]);
+  });
+
   it("queues normal sends made while disconnected", async () => {
     const host = makeHost({
       client: null,
@@ -2712,6 +2780,48 @@ describe("handleSendChat", () => {
     expect(host.chatMessages).toStrictEqual([]);
     expect(host.chatRunId).toBeNull();
     expect(host.chatStream).toBeNull();
+  });
+
+  it("keeps an existing queued send visible when retry persistence fails", async () => {
+    const storage = createStorageMock();
+    vi.spyOn(storage, "setItem").mockImplementation(() => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    });
+    vi.stubGlobal("sessionStorage", storage);
+    const request = vi.fn((method: string) => {
+      if (method === "chat.send") {
+        throw new Error("gateway closed (1006): network lost");
+      }
+      throw new Error(`Unexpected request: ${method}`);
+    });
+    const host = makeHost({
+      client: { request } as unknown as ChatHost["client"],
+      connected: true,
+      chatQueue: [
+        {
+          id: "queued-retry-storage-failure",
+          text: "keep this queued message",
+          createdAt: 1,
+          sendRunId: "run-retry-storage-failure",
+          sendState: "waiting-reconnect",
+          sessionKey: "agent:main",
+        },
+      ],
+    });
+
+    await retryReconnectableQueuedChatSends(host);
+
+    expect(host.chatQueue).toEqual([
+      expect.objectContaining({
+        id: "queued-retry-storage-failure",
+        sendError:
+          "Could not store this message for reconnect. Free browser storage or reconnect before sending.",
+        sendState: "failed",
+      }),
+    ]);
+    expect(host.lastError).toBe(
+      "Could not store this message for reconnect. Free browser storage or reconnect before sending.",
+    );
   });
 
   it("defers queued global send agent selection until defaults are known", async () => {
