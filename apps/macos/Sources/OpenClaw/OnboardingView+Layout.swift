@@ -41,10 +41,7 @@ extension OnboardingView {
             self.updateMonitoring(for: self.activePageIndex(for: newValue))
         }
         .onChange(of: state.connectionMode) { _, _ in
-            self.aiSetup.resetForGatewayChange()
-            let oldActive = self.activePageIndex
-            self.reconcilePageForModeChange(previousActivePageIndex: oldActive)
-            self.updateDiscoveryMonitoring(for: self.activePageIndex)
+            self.handleConnectionModeChange()
         }
         .onChange(of: needsBootstrap) { _, _ in
             if self.currentPage >= self.pageOrder.count {
@@ -86,6 +83,18 @@ extension OnboardingView {
             return
         }
         withAnimation { self.currentPage = max(0, self.pageOrder.count - 1) }
+    }
+
+    func handleConnectionModeChange(updatePageMonitoring: ((Int) -> Void)? = nil) {
+        self.aiSetup.resetForGatewayChange()
+        let oldActive = self.activePageIndex
+        self.reconcilePageForModeChange(previousActivePageIndex: oldActive)
+        if let updatePageMonitoring {
+            updatePageMonitoring(self.activePageIndex)
+            return
+        }
+        // A mode swap can keep the same page cursor, so its onChange hook may not restart AI setup.
+        self.updateMonitoring(for: self.activePageIndex)
     }
 
     var navigationBar: some View {

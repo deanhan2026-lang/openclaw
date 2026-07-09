@@ -110,6 +110,20 @@ struct OnboardingViewSmokeTests {
             installing: false))
     }
 
+    @Test func `connection mode change restarts full page monitoring`() {
+        let state = AppState(preview: true)
+        let view = OnboardingView(state: state)
+        var monitoredPage: Int?
+        view.aiSetup.manualKey = "route-bound"
+
+        view.handleConnectionModeChange { pageIndex in
+            monitoredPage = pageIndex
+        }
+
+        #expect(view.aiSetup.manualKey.isEmpty)
+        #expect(monitoredPage == view.activePageIndex)
+    }
+
     @Test func `select remote gateway clears stale ssh target when endpoint unresolved`() async {
         let override = FileManager().temporaryDirectory
             .appendingPathComponent("openclaw-config-\(UUID().uuidString)")
