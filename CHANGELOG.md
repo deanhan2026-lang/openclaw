@@ -25,6 +25,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- **macOS inference onboarding:** hide Crestodian until inference works, expose copyable expandable setup errors, detect authenticated Codex and Claude CLI routes, persist managed Codex install ownership across failed probes, and reset route-bound setup and chat state after Gateway changes. (#102614, #102637)
 - **Codex computer control:** publish fixed-length coordinate pairs as homogeneous array schemas so Codex app-server can start threads with the `computer` tool instead of rejecting tuple-valued `items`.
 - **Google Chat request deadlines:** bound control calls to 30 seconds while giving media transfers size-aware total budgets and a separate 30-second stalled-body guard, preventing hung Chat API requests without breaking large attachment uploads. (#102227) Thanks @hugenshen.
 - **Google Gemini prefixed model IDs:** recognize `google/gemini-*` and `models/gemini-*` when selecting multimodal function-response behavior, preserving the Gemini 2 image fallback without regressing Gemini 3 inline image responses. (#102382) Thanks @LiLan0125.

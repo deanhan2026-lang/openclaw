@@ -629,12 +629,20 @@ async function activateSetupInferenceUnredacted(
       // This explicit Codex CLI choice owns its runtime independently of the
       // user's existing OpenAI provider route (which may use a custom base URL).
       const codexInstallBase = applyMergePatch(cfg, CODEX_CLI_RUNTIME_PATCH) as OpenClawConfig;
+      const enabledCodexBase = enablePluginInConfig(codexInstallBase, "codex");
+      if (!enabledCodexBase.enabled) {
+        return {
+          ok: false,
+          status: "unavailable",
+          error: `Could not enable the Codex runtime plugin: ${enabledCodexBase.reason ?? "plugin disabled"}.`,
+        };
+      }
       const ensureCodex =
         deps.ensureCodexRuntimePlugin ??
         (await import("../commands/codex-runtime-plugin-install.js"))
           .ensureCodexRuntimePluginForModelSelection;
       const ensured = await ensureCodex({
-        cfg: codexInstallBase,
+        cfg: enabledCodexBase.config,
         model: plan.modelRef,
         prompter: createQuickstartNotePrompter(params.runtime),
         runtime: params.runtime,
@@ -652,6 +660,33 @@ async function activateSetupInferenceUnredacted(
                 : "Could not install the Codex runtime plugin. Try again once the plugin is available.",
         };
       }
+      const pendingCodexInstall = ensured.cfg.plugins?.installs?.codex;
+      if (pendingCodexInstall) {
+        // The package is already in the managed global root. Record ownership now so a
+        // failed or abandoned live probe cannot leave an untracked install behind.
+        const transformConfig =
+          deps.transformConfigWithPendingPluginInstalls ??
+          (await import("../cli/plugins-install-record-commit.js"))
+            .transformConfigWithPendingPluginInstalls;
+        await transformConfig({
+          afterWrite: {
+            mode: "none",
+            reason: "Crestodian records the installed Codex runtime before probing",
+          },
+          transform: (current) => ({
+            nextConfig: {
+              ...current,
+              plugins: {
+                ...current.plugins,
+                installs: {
+                  ...current.plugins?.installs,
+                  codex: pendingCodexInstall,
+                },
+              },
+            },
+          }),
+        });
+      }
       const enabledCodex = enablePluginInConfig(ensured.cfg, "codex");
       if (!enabledCodex.enabled) {
         return {
@@ -660,13 +695,16 @@ async function activateSetupInferenceUnredacted(
           error: `Could not enable the Codex runtime plugin: ${enabledCodex.reason ?? "plugin disabled"}.`,
         };
       }
-      // The install record, enablement, and model-scoped runtime pin are
-      // transient probe inputs. Persist the same delta only after completion.
-      const stagedCodexConfig = enabledCodex.config;
+      // Enablement and the model-scoped runtime pin remain transient probe inputs.
+      // Persist them only after completion; the managed install record is durable above.
+      const { stripPendingPluginInstallRecords } =
+        await import("../cli/plugins-install-record-commit.js");
+      const codexProbePatch = createMergePatch(cfg, enabledCodex.config);
+      const stagedCodexConfig = stripPendingPluginInstallRecords(enabledCodex.config, ["codex"]);
       codexPluginPatch = createMergePatch(cfg, stagedCodexConfig);
       testPlan = {
         ...plan,
-        config: applyMergePatch(plan.config, codexPluginPatch) as OpenClawConfig,
+        config: applyMergePatch(plan.config, codexProbePatch) as OpenClawConfig,
       };
     }
 
@@ -687,8 +725,8 @@ async function activateSetupInferenceUnredacted(
     }
 
     if (codexPluginPatch !== undefined) {
-      // The installer returns a transient plugins.installs record. Commit through its owner so
-      // the managed package remains discoverable after config strips that legacy-shaped field.
+      // Persist success-gated enablement and the model-scoped runtime pin. The managed
+      // install record was committed before the live probe.
       const transformConfig =
         deps.transformConfigWithPendingPluginInstalls ??
         (await import("../cli/plugins-install-record-commit.js"))

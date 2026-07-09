@@ -630,12 +630,14 @@ describe("activateSetupInference", () => {
       ...initialConfig,
       gateway: { port: 19000 },
     };
-    let pendingCodexInstall: unknown;
+    const pendingCodexInstalls: unknown[] = [];
     const transformConfig = vi.fn(
       async (params: { transform: (config: OpenClawConfig) => { nextConfig: OpenClawConfig } }) => {
-        events.push("persist-plugin");
         const transformed = params.transform(persistedConfig).nextConfig;
-        pendingCodexInstall = transformed.plugins?.installs?.codex;
+        events.push(
+          transformed.agents?.defaults?.models ? "persist-plugin-config" : "persist-plugin-install",
+        );
+        pendingCodexInstalls.push(transformed.plugins?.installs?.codex);
         persistedConfig = withoutPluginInstallRecords(transformed);
         return { nextConfig: persistedConfig };
       },
@@ -686,11 +688,13 @@ describe("activateSetupInference", () => {
     );
     expect(events).toEqual([
       "install-plugin",
+      "persist-plugin-install",
       "live-test",
-      "persist-plugin",
+      "persist-plugin-config",
       "refresh-plugin-registry",
       "persist-setup",
     ]);
+    expect(transformConfig).toHaveBeenCalledTimes(2);
     expect(transformConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         afterWrite: {
@@ -753,11 +757,12 @@ describe("activateSetupInference", () => {
       },
     });
     expect(persistedConfig.plugins?.installs).toBeUndefined();
-    expect(pendingCodexInstall).toMatchObject({
+    expect(pendingCodexInstalls[0]).toMatchObject({
       source: "npm",
       spec: "@openclaw/codex",
       installPath: "/tmp/plugins/codex",
     });
+    expect(pendingCodexInstalls[1]).toBeUndefined();
   });
 
   it("does not run or persist when the codex runtime install fails", async () => {
@@ -791,9 +796,59 @@ describe("activateSetupInference", () => {
     expect(applySetup).not.toHaveBeenCalled();
   });
 
-  it("does not persist codex setup when the live test fails", async () => {
+  it("does not install codex when plugin policy blocks it", async () => {
+    const ensureCodex = vi.fn();
+    const runEmbeddedAgent = vi.fn();
     const applySetup = vi.fn();
     const transformConfig = vi.fn();
+    const refreshPluginRegistry = vi.fn();
+    const blockedConfig: OpenClawConfig = { plugins: { allow: ["other"] } };
+    const result = await activateSetupInference({
+      kind: "codex-cli",
+      surface: "gateway",
+      runtime,
+      deps: {
+        readConfigFileSnapshot: vi.fn(async () => ({
+          exists: true,
+          valid: true,
+          path: "/tmp/openclaw.json",
+          issues: [],
+          config: blockedConfig,
+          runtimeConfig: blockedConfig,
+        })) as never,
+        ensureCodexRuntimePlugin: ensureCodex as never,
+        runEmbeddedAgent: runEmbeddedAgent as never,
+        applySetup: applySetup as never,
+        transformConfigWithPendingPluginInstalls: transformConfig as never,
+        refreshPluginRegistryAfterConfigMutation: refreshPluginRegistry as never,
+        createTempDir: makeTempDir,
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: "unavailable",
+      error: expect.stringContaining("blocked by allowlist"),
+    });
+    expect(ensureCodex).not.toHaveBeenCalled();
+    expect(runEmbeddedAgent).not.toHaveBeenCalled();
+    expect(transformConfig).not.toHaveBeenCalled();
+    expect(refreshPluginRegistry).not.toHaveBeenCalled();
+    expect(applySetup).not.toHaveBeenCalled();
+  });
+
+  it("records codex install ownership but not setup when the live test fails", async () => {
+    const applySetup = vi.fn();
+    let pendingCodexInstall: unknown;
+    let recordCommitConfig: OpenClawConfig | undefined;
+    const transformConfig = vi.fn(
+      async (params: { transform: (config: OpenClawConfig) => { nextConfig: OpenClawConfig } }) => {
+        const transformed = params.transform({}).nextConfig;
+        recordCommitConfig = transformed;
+        pendingCodexInstall = transformed.plugins?.installs?.codex;
+        return { nextConfig: withoutPluginInstallRecords(transformed) };
+      },
+    );
     const refreshPluginRegistry = vi.fn();
     const result = await activateSetupInference({
       kind: "codex-cli",
@@ -801,7 +856,17 @@ describe("activateSetupInference", () => {
       runtime,
       deps: {
         ensureCodexRuntimePlugin: vi.fn(async () => ({
-          cfg: {},
+          cfg: {
+            plugins: {
+              installs: {
+                codex: {
+                  source: "npm" as const,
+                  spec: "@openclaw/codex",
+                  installPath: "/tmp/plugins/codex",
+                },
+              },
+            },
+          },
           required: true,
           installed: true,
           status: "installed" as const,
@@ -817,7 +882,22 @@ describe("activateSetupInference", () => {
     });
 
     expect(result).toMatchObject({ ok: false, status: "auth" });
-    expect(transformConfig).not.toHaveBeenCalled();
+    expect(transformConfig).toHaveBeenCalledOnce();
+    expect(transformConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        afterWrite: {
+          mode: "none",
+          reason: "Crestodian records the installed Codex runtime before probing",
+        },
+      }),
+    );
+    expect(pendingCodexInstall).toMatchObject({
+      source: "npm",
+      spec: "@openclaw/codex",
+      installPath: "/tmp/plugins/codex",
+    });
+    expect(recordCommitConfig?.agents).toBeUndefined();
+    expect(recordCommitConfig?.plugins?.entries).toBeUndefined();
     expect(refreshPluginRegistry).not.toHaveBeenCalled();
     expect(applySetup).not.toHaveBeenCalled();
   });

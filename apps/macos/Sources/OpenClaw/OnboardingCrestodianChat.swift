@@ -3,6 +3,18 @@ import Observation
 import OpenClawIPC
 import SwiftUI
 
+@MainActor
+@Observable
+final class OnboardingCrestodianChatState {
+    var chat = CrestodianOnboardingChatModel()
+    var isPresented = false
+
+    func resetForGatewayChange() {
+        self.isPresented = false
+        self.chat = CrestodianOnboardingChatModel()
+    }
+}
+
 /// Onboarding talks to Crestodian over the gateway `crestodian.chat` RPC.
 /// The conversation is available after structured setup establishes working
 /// inference, so the model-backed helper can answer reliably.

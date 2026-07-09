@@ -128,7 +128,7 @@ struct OnboardingView: View {
     @State var gatewayDiscovery: GatewayDiscoveryModel
     @State var onboardingChatModel: OpenClawChatViewModel
     @State var onboardingSkillsModel = SkillsSettingsModel()
-    @State var crestodianChat = CrestodianOnboardingChatModel()
+    @State var crestodianState = OnboardingCrestodianChatState()
     @State var aiSetup = OnboardingAISetupModel()
     @State var didLoadOnboardingSkills = false
     @State var localGatewayProbe: LocalGatewayProbe?

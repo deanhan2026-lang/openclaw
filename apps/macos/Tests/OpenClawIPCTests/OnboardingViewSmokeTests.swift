@@ -114,13 +114,17 @@ struct OnboardingViewSmokeTests {
         let state = AppState(preview: true)
         let view = OnboardingView(state: state)
         var monitoredPage: Int?
+        let previousCrestodianChat = view.crestodianState.chat
         view.aiSetup.manualKey = "route-bound"
+        view.crestodianState.isPresented = true
 
         view.handleConnectionModeChange { pageIndex in
             monitoredPage = pageIndex
         }
 
         #expect(view.aiSetup.manualKey.isEmpty)
+        #expect(!view.crestodianState.isPresented)
+        #expect(view.crestodianState.chat !== previousCrestodianChat)
         #expect(monitoredPage == view.activePageIndex)
     }
 

@@ -1,3 +1,5 @@
+import Foundation
+import OpenClawKit
 import Testing
 @testable import OpenClaw
 
@@ -32,6 +34,39 @@ struct OnboardingAISetupTests {
 
         #expect(failure.summary == "Gateway request failed: connection reset")
         #expect(failure.detail == "Gateway request failed: connection reset")
+    }
+
+    @Test func `codex activation covers install probe and finalization`() {
+        #expect(OnboardingAISetupModel.activationRequestTimeoutMs(for: "codex-cli") == 480_000)
+        #expect(OnboardingAISetupModel.activationRequestTimeoutMs(for: "claude-cli") == 150_000)
+        #expect(OnboardingAISetupModel.activationRequestTimeoutMs(for: "codex-cli") >= (305 + 90) * 1000)
+        #expect(OnboardingAISetupModel.activationOutcomeDeadlineMs(for: "codex-cli") == 510_000)
+    }
+
+    @Test func `incomplete detection is not a reconciled activation`() {
+        #expect(!OnboardingAISetupModel.activationIsPersisted(
+            expectedModel: "openai/gpt-5.5",
+            setupComplete: false,
+            configuredModel: nil))
+        #expect(OnboardingAISetupModel.activationIsPersisted(
+            expectedModel: "openai/gpt-5.5",
+            setupComplete: true,
+            configuredModel: "openai/gpt-5.5"))
+    }
+
+    @Test func `definitive gateway response does not enter reconciliation`() {
+        let responseError = GatewayResponseError(
+            method: "crestodian.setup.activate",
+            code: "UNKNOWN_METHOD",
+            message: "unknown method",
+            details: nil)
+        let timeout = NSError(
+            domain: "Gateway",
+            code: 5,
+            userInfo: [NSLocalizedDescriptionKey: "gateway request timed out"])
+
+        #expect(!OnboardingAISetupModel.activationMayStillBeRunning(after: responseError))
+        #expect(OnboardingAISetupModel.activationMayStillBeRunning(after: timeout))
     }
 
     @Test func `gateway change clears route-bound setup state`() {

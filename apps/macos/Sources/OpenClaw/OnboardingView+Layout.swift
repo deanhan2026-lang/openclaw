@@ -86,7 +86,7 @@ extension OnboardingView {
     }
 
     func handleConnectionModeChange(updatePageMonitoring: ((Int) -> Void)? = nil) {
-        self.aiSetup.resetForGatewayChange()
+        self.resetGatewayBoundAIState()
         let oldActive = self.activePageIndex
         self.reconcilePageForModeChange(previousActivePageIndex: oldActive)
         if let updatePageMonitoring {
@@ -95,6 +95,13 @@ extension OnboardingView {
         }
         // A mode swap can keep the same page cursor, so its onChange hook may not restart AI setup.
         self.updateMonitoring(for: self.activePageIndex)
+    }
+
+    func resetGatewayBoundAIState() {
+        self.aiSetup.resetForGatewayChange()
+        // Crestodian sessions belong to one Gateway. Dismiss and replace the chat so
+        // changing routes cannot send an old session ID to the new endpoint.
+        self.crestodianState.resetForGatewayChange()
     }
 
     var navigationBar: some View {

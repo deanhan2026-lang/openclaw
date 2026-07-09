@@ -17,7 +17,10 @@ extension OnboardingView {
                 .fixedSize(horizontal: false, vertical: true)
 
             ScrollView {
-                OnboardingAISetupView(model: self.aiSetup, crestodianChat: self.crestodianChat)
+                OnboardingAISetupView(
+                    model: self.aiSetup,
+                    crestodianChat: self.crestodianState.chat,
+                    showCrestodianChat: self.$crestodianState.isPresented)
                     .padding(.vertical, 4)
                     .padding(.trailing, 12)
             }

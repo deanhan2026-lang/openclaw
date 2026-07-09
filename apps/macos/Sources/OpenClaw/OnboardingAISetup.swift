@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Observation
 import OpenClawIPC
+import OpenClawKit
 import SwiftUI
 
 /// Structured "Connect your AI" onboarding step.
@@ -221,6 +222,34 @@ final class OnboardingAISetupModel {
         return raw
     }
 
+    static func activationRequestTimeoutMs(for kind: String) -> Double {
+        // Codex can spend 305s installing its runtime plugin before the 90s live probe.
+        // Keep a bounded client deadline with room for registry refresh and finalization.
+        kind == "codex-cli" ? 480_000 : 150_000
+    }
+
+    static func activationOutcomeDeadlineMs(for kind: String) -> Double {
+        // A request timeout removes only the client waiter. Keep a short final window
+        // to observe config that the still-running Gateway operation just persisted.
+        self.activationRequestTimeoutMs(for: kind) + 30000
+    }
+
+    static func activationIsPersisted(
+        expectedModel: String,
+        setupComplete: Bool,
+        configuredModel: String?) -> Bool
+    {
+        setupComplete && configuredModel == expectedModel
+    }
+
+    static func activationMayStillBeRunning(after error: Error) -> Bool {
+        // A structured response or connection-policy failure proves the request did not
+        // disappear mid-flight. Poll only errors whose server-side outcome is unknown.
+        !(error is GatewayResponseError ||
+            error is GatewayConnectAuthError ||
+            error is GatewayTLSValidationError)
+    }
+
     /// Candidates the automatic ladder may try: skip definitively logged-out
     /// installs and anything already attempted.
     private func autoCandidateAfter(kind: String?) -> Candidate? {
@@ -243,6 +272,10 @@ final class OnboardingAISetupModel {
 
     func activate(kind: String) async {
         let token = self.attemptToken
+        let clock = ContinuousClock()
+        let requestTimeoutMs = Self.activationRequestTimeoutMs(for: kind)
+        let outcomeDeadlineMs = Self.activationOutcomeDeadlineMs(for: kind)
+        let reconciliationDeadline = clock.now.advanced(by: .milliseconds(Int64(outcomeDeadlineMs)))
         self.selectedKind = kind
         self.phase = .testing
         self.statuses[kind] = .testing
@@ -250,7 +283,7 @@ final class OnboardingAISetupModel {
             let data = try await GatewayConnection.shared.request(
                 method: "crestodian.setup.activate",
                 params: ["kind": AnyCodable(kind)],
-                timeoutMs: 150_000,
+                timeoutMs: requestTimeoutMs,
                 retryTransportFailures: false)
             guard token == self.attemptToken else { return }
             let result = try JSONDecoder().decode(ActivateResult.self, from: data)
@@ -265,17 +298,23 @@ final class OnboardingAISetupModel {
             }
         } catch {
             guard token == self.attemptToken else { return }
-            // Activating a CLI candidate can install a provider plugin (Codex),
-            // and the gateway restarts itself to load it — dropping this RPC's
-            // socket after the server already tested and persisted the model.
+            // Activating a CLI candidate can install a provider plugin (Codex), and
+            // server-side work can outlive a dropped client socket.
             // A transport error means "outcome unknown", not "failed": re-read
             // server state before reporting failure.
-            if await self.reconcileActivationAfterTransportDrop(kind: kind, token: token) {
+            if Self.activationMayStillBeRunning(after: error),
+               await self.reconcileActivationAfterTransportDrop(
+                   kind: kind,
+                   token: token,
+                   deadline: reconciliationDeadline)
+            {
                 return
             }
             guard token == self.attemptToken else { return }
             self.statuses[kind] = .failed(Self.transportFailure(error.localizedDescription))
-            await self.tryNextAfterFailure(of: kind)
+            // Outcome is still unknown after a transport failure. Do not start another
+            // provider that could race a late server-side Codex completion.
+            self.phase = .ready
         }
     }
 
@@ -283,13 +322,24 @@ final class OnboardingAISetupModel {
     /// (the gateway restart takes a few seconds) and count the attempt as
     /// connected only when the server persisted exactly the model this
     /// candidate would have written. Returns true when reconciled.
-    private func reconcileActivationAfterTransportDrop(kind: String, token: UUID) async -> Bool {
+    private func reconcileActivationAfterTransportDrop(
+        kind: String,
+        token: UUID,
+        deadline: ContinuousClock.Instant) async -> Bool
+    {
         guard let expected = self.candidates.first(where: { $0.kind == kind })?.modelRef else {
             return false
         }
-        for delayMs in [2000, 4000, 6000] {
-            try? await Task.sleep(nanoseconds: UInt64(delayMs) * 1_000_000)
+        let clock = ContinuousClock()
+        var delayMs: UInt64 = 2000
+        while clock.now < deadline {
+            do {
+                try await Task.sleep(nanoseconds: delayMs * 1_000_000)
+            } catch {
+                return false
+            }
             guard token == self.attemptToken else { return false }
+            delayMs = min(delayMs * 2, 15000)
             guard let data = try? await GatewayConnection.shared.request(
                 method: "crestodian.setup.detect",
                 params: [:],
@@ -297,16 +347,19 @@ final class OnboardingAISetupModel {
                 retryTransportFailures: true)
             else { continue }
             guard token == self.attemptToken else { return false }
-            guard let result = try? JSONDecoder().decode(DetectResult.self, from: data) else { return false }
-            if result.setupComplete, result.configuredModel == expected {
+            guard let result = try? JSONDecoder().decode(DetectResult.self, from: data) else { continue }
+            if Self.activationIsPersisted(
+                expectedModel: expected,
+                setupComplete: result.setupComplete,
+                configuredModel: result.configuredModel)
+            {
                 self.finishConnected(
                     kind: kind,
                     result: ActivateResult(ok: true, modelRef: expected, latencyMs: nil, status: nil, error: nil))
                 return true
             }
-            // The gateway answered and setup is not complete: the activation
-            // genuinely failed before persisting — report the original error.
-            return false
+            // A healthy detect can race the still-running activation whose socket dropped;
+            // keep polling instead of falling through to another provider.
         }
         return false
     }
@@ -432,8 +485,8 @@ private enum OnboardingAISetupError: LocalizedError {
 
 struct OnboardingAISetupView: View {
     @Bindable var model: OnboardingAISetupModel
-    @State private var showCrestodianChat = false
     var crestodianChat: CrestodianOnboardingChatModel
+    @Binding var showCrestodianChat: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
