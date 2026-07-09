@@ -554,21 +554,40 @@ describe("activateSetupInference", () => {
 
   it("installs the codex runtime before exercising its harness", async () => {
     const events: string[] = [];
+    const installedConfig = {
+      plugins: {
+        entries: { codex: { enabled: true } },
+        installs: {
+          codex: {
+            source: "npm" as const,
+            spec: "@openclaw/codex",
+            installPath: "/tmp/plugins/codex",
+          },
+        },
+      },
+    } satisfies OpenClawConfig;
     const applySetup = vi.fn(async () => {
       events.push("persist-setup");
       return { configPath: "/tmp/openclaw.json", lines: ["ok"] };
     });
     const ensureCodex = vi.fn(async () => {
       events.push("install-plugin");
-      return { cfg: {}, required: true, installed: true, status: "installed" as const };
+      return {
+        cfg: installedConfig,
+        required: true,
+        installed: true,
+        status: "installed" as const,
+      };
     });
     const runEmbeddedAgent = vi.fn(async (_params: unknown) => {
       events.push("live-test");
       return { meta: { finalAssistantVisibleText: "OK" } };
     });
+    let persistedConfig: OpenClawConfig | undefined;
     const updateConfig = vi.fn(async (updater: (config: OpenClawConfig) => OpenClawConfig) => {
       events.push("persist-plugin");
-      return updater({});
+      persistedConfig = updater({});
+      return persistedConfig;
     });
     const result = await activateSetupInference({
       kind: "codex-cli",
@@ -588,8 +607,11 @@ describe("activateSetupInference", () => {
     // Harness selection: codex tests run embedded with the codex harness.
     expect(runEmbeddedAgent.mock.calls[0]?.[0]).toMatchObject({
       agentHarnessId: "codex",
+      agentHarnessRuntimeOverride: "codex",
       provider: "openai",
+      config: installedConfig,
     });
+    expect(persistedConfig).toEqual(installedConfig);
   });
 
   it("does not run or persist when the codex runtime install fails", async () => {

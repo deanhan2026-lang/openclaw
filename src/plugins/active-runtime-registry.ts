@@ -17,9 +17,7 @@ export function getActiveRuntimePluginRegistry(): PluginRegistry | null {
 }
 
 function isRuntimePluginRecordLoaded(plugin: PluginRecord): boolean {
-  return (
-    plugin.status === "loaded" && (plugin.format === "bundle" || plugin.imported !== false)
-  );
+  return plugin.status === "loaded" && (plugin.format === "bundle" || plugin.imported !== false);
 }
 
 // Plugin ids confirmed loaded across every live runtime registry surface

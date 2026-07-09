@@ -587,7 +587,8 @@ export async function activateSetupInference(
       return { ok: false, status: "unavailable", error: plan.error };
     }
 
-    let persistCodexPlugin = false;
+    let codexPluginPatch: unknown;
+    let testPlan = plan;
     if (params.kind === "codex-cli") {
       const ensureCodex =
         deps.ensureCodexRuntimePlugin ??
@@ -610,9 +611,15 @@ export async function activateSetupInference(
               : "Could not install the Codex runtime plugin. Try again once the plugin is available.",
         };
       }
-      // Harness discovery needs the package on disk for the live test. Keep
-      // config and the default model untouched until that completion succeeds.
-      persistCodexPlugin = ensured.required;
+      if (ensured.required) {
+        // The install record is a transient discovery input. Stage it only in
+        // the probe config; persist the same delta after the completion passes.
+        codexPluginPatch = createMergePatch(cfg, ensured.cfg);
+        testPlan = {
+          ...plan,
+          config: applyMergePatch(plan.config, codexPluginPatch) as OpenClawConfig,
+        };
+      }
     }
 
     if (plan.manualAuth) {
@@ -626,15 +633,15 @@ export async function activateSetupInference(
       }
     }
 
-    const test = await runSetupInferenceTest({ plan, tempDir, deps });
+    const test = await runSetupInferenceTest({ plan: testPlan, tempDir, deps });
     if (!test.ok) {
       return test;
     }
 
-    if (persistCodexPlugin) {
+    if (codexPluginPatch !== undefined) {
       const updateConfig =
         deps.updateConfig ?? (await import("../commands/models/shared.js")).updateConfig;
-      await updateConfig((current) => enablePluginInConfig(current, "codex").config);
+      await updateConfig((current) => applyMergePatch(current, codexPluginPatch) as OpenClawConfig);
     }
     if (plan.manualAuth) {
       const manualAuth = plan.manualAuth;
@@ -752,7 +759,11 @@ async function runSetupInferenceTest(params: {
           ? { authProfileId: plan.authProfileId, authProfileIdSource: "user" as const }
           : {}),
         ...(plan.agentHarnessId
-          ? { agentHarnessId: plan.agentHarnessId, cleanupBundleMcpOnRunEnd: true }
+          ? {
+              agentHarnessId: plan.agentHarnessId,
+              agentHarnessRuntimeOverride: plan.agentHarnessId,
+              cleanupBundleMcpOnRunEnd: true,
+            }
           : {}),
         timeoutMs,
         runId,
