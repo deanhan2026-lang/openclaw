@@ -20,6 +20,7 @@ import {
   registerSqliteCacheExitClose,
   type SqliteWalMaintenance,
 } from "../infra/sqlite-wal.js";
+import { createSubsystemLogger } from "../logging/subsystem.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import type { DB as OpenClawAgentKyselyDatabase } from "./openclaw-agent-db.generated.js";
 import { resolveOpenClawAgentSqlitePath } from "./openclaw-agent-db.paths.js";
@@ -43,6 +44,8 @@ export { resolveOpenClawAgentSqlitePath } from "./openclaw-agent-db.paths.js";
 const OPENCLAW_AGENT_SCHEMA_VERSION = 4;
 const OPENCLAW_AGENT_DB_DIR_MODE = 0o700;
 const OPENCLAW_AGENT_DB_FILE_MODE = 0o600;
+const OPENCLAW_AGENT_DB_SLOW_OPEN_MS = 1_000;
+const agentDbLog = createSubsystemLogger("state/agent-db");
 
 /** Open per-agent SQLite database handle plus lifecycle maintenance. */
 export type OpenClawAgentDatabase = {
@@ -69,6 +72,23 @@ type ExistingSchemaMeta = {
 };
 
 type MigratedSessionEntry = Record<string, unknown>;
+
+function logSlowAgentDatabaseOpen(params: {
+  agentId: string;
+  elapsedMs: number;
+  path: string;
+}): void {
+  if (params.elapsedMs < OPENCLAW_AGENT_DB_SLOW_OPEN_MS) {
+    return;
+  }
+  agentDbLog.warn("slow OpenClaw agent database open", {
+    agentId: params.agentId,
+    elapsedMs: params.elapsedMs,
+    path: params.path,
+    thresholdMs: OPENCLAW_AGENT_DB_SLOW_OPEN_MS,
+  });
+}
+
 function assertSupportedAgentSchemaVersion(db: DatabaseSync, pathname: string): void {
   const userVersion = readSqliteUserVersion(db);
   if (userVersion > OPENCLAW_AGENT_SCHEMA_VERSION) {
@@ -565,6 +585,7 @@ export function openOpenClawAgentDatabase(
     cachedDatabases.delete(pathname);
   }
 
+  const openStartedAt = Date.now();
   ensureOpenClawAgentDatabasePermissions(pathname, databaseOptions);
   const sqlite = requireNodeSqlite();
   const db = new sqlite.DatabaseSync(pathname);
@@ -596,6 +617,11 @@ export function openOpenClawAgentDatabase(
     registerAgentDatabase({ agentId, path: pathname, env: options.env });
     registeredDatabasePaths.add(pathname);
   }
+  logSlowAgentDatabaseOpen({
+    agentId,
+    elapsedMs: Date.now() - openStartedAt,
+    path: pathname,
+  });
   return database;
 }
 
