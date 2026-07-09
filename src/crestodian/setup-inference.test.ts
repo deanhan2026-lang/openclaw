@@ -691,6 +691,14 @@ describe("activateSetupInference", () => {
       "refresh-plugin-registry",
       "persist-setup",
     ]);
+    expect(transformConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        afterWrite: {
+          mode: "none",
+          reason: "Crestodian setup finalizes config after refresh",
+        },
+      }),
+    );
     expect(refreshPluginRegistry).toHaveBeenCalledWith({
       config: persistedConfig,
       reason: "source-changed",

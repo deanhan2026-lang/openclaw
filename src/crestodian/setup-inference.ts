@@ -694,6 +694,9 @@ async function activateSetupInferenceUnredacted(
         (await import("../cli/plugins-install-record-commit.js"))
           .transformConfigWithPendingPluginInstalls;
       const committed = await transformConfig({
+        // Keep the setup RPC alive until the final model/setup write completes. The explicit
+        // registry refresh below makes the newly installed plugin available without a restart.
+        afterWrite: { mode: "none", reason: "Crestodian setup finalizes config after refresh" },
         transform: (current) => ({
           nextConfig: applyMergePatch(current, codexPluginPatch) as OpenClawConfig,
         }),
