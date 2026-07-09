@@ -93,7 +93,8 @@ struct SettingsRootView: View {
             self.scheduleInferenceRefresh(clearPrevious: false)
         }
         .onReceive(NotificationCenter.default.publisher(for: .openclawConfigDidChange)) { _ in
-            self.scheduleInferenceRefresh(clearPrevious: true)
+            // Keep an active chat mounted while same-route config truth is revalidated.
+            self.scheduleInferenceRefresh(clearPrevious: self.selectedTab != .crestodian)
         }
         .onDisappear { self.stopPermissionMonitoring() }
         .task {
@@ -310,6 +311,8 @@ struct SettingsRootView: View {
             // A route change or task cancellation must not apply stale gateway state.
         } catch {
             guard !Task.isCancelled else { return }
+            // Preserve only route-confirmed truth. If this route has never loaded, stay hidden
+            // until app activation, config invalidation, or a route change triggers another probe.
             self.inferenceConfiguration = Self.configurationAfterInferenceRefresh(
                 current: self.inferenceConfiguration,
                 result: .failed)
@@ -365,7 +368,11 @@ struct SettingsRootView: View {
 
     private func scheduleInferenceRefresh(clearPrevious: Bool) {
         if clearPrevious {
+            // Preserve an active or pending Crestodian request while config truth is revalidated.
+            // A confirmed model restores it; a confirmed missing model leaves General selected.
+            let requestedTab = self.deferredTab ?? self.selectedTab
             self.inferenceConfiguration = .loading
+            self.selectRequestedTab(requestedTab)
         }
         self.inferenceRefreshTrigger = clearPrevious ? .invalidate(UUID()) : .verify(UUID())
     }

@@ -135,7 +135,15 @@ final class OnboardingAISetupModel {
     }
 
     func retryFromScratch() {
+        self.resetForGatewayChange()
+        self.started = true
+        Task { await self.detectAndAutoConnect() }
+    }
+
+    /// Cancel route-bound work and discard results that belong to the previous Gateway.
+    func resetForGatewayChange() {
         self.attemptToken = UUID()
+        self.started = false
         self.phase = .idle
         self.candidates = []
         self.manualProviders = []
@@ -143,12 +151,15 @@ final class OnboardingAISetupModel {
         self.providerCatalogError = nil
         self.statuses = [:]
         self.selectedKind = nil
+        self.connectedModelRef = nil
+        self.connectedLatencyMs = nil
         self.detectError = nil
         self.exhaustedAutoCandidates = false
+        self.manualProviderID = ""
+        self.manualKey = ""
         self.manualError = nil
         self.manualTesting = false
         self.showManualEntry = false
-        Task { await self.detectAndAutoConnect() }
     }
 
     func detectAndAutoConnect() async {
@@ -307,7 +318,11 @@ final class OnboardingAISetupModel {
         self.manualTesting = true
         let token = self.attemptToken
         Task {
-            defer { self.manualTesting = false }
+            defer {
+                if token == self.attemptToken {
+                    self.manualTesting = false
+                }
+            }
             do {
                 let data = try await GatewayConnection.shared.request(
                     method: "crestodian.setup.activate",

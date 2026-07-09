@@ -41,6 +41,7 @@ extension OnboardingView {
             self.updateMonitoring(for: self.activePageIndex(for: newValue))
         }
         .onChange(of: state.connectionMode) { _, _ in
+            self.aiSetup.resetForGatewayChange()
             let oldActive = self.activePageIndex
             self.reconcilePageForModeChange(previousActivePageIndex: oldActive)
             self.updateDiscoveryMonitoring(for: self.activePageIndex)

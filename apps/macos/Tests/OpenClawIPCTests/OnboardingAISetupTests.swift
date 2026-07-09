@@ -33,4 +33,20 @@ struct OnboardingAISetupTests {
         #expect(failure.summary == "Gateway request failed: connection reset")
         #expect(failure.detail == "Gateway request failed: connection reset")
     }
+
+    @Test func `gateway change clears route-bound setup state`() {
+        let model = OnboardingAISetupModel()
+        model.manualProviderID = "openai"
+        model.manualKey = "temporary-key"
+        model.showManualEntry = true
+
+        model.resetForGatewayChange()
+
+        #expect(model.phase == .idle)
+        #expect(model.connectedModelRef == nil)
+        #expect(model.connectedLatencyMs == nil)
+        #expect(model.manualProviderID.isEmpty)
+        #expect(model.manualKey.isEmpty)
+        #expect(!model.showManualEntry)
+    }
 }
