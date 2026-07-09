@@ -44,14 +44,6 @@ export function normalizeMessageActionInput(params: {
     channel: inferredChannel,
     aliasSpec: params.targetAliasSpec,
   });
-  const signalReplyToIdAlias =
-    action === "send" && inferredChannel === "signal"
-      ? normalizeOptionalString(normalizedArgs.replyToId)
-      : undefined;
-
-  if (!normalizeOptionalString(normalizedArgs.replyTo) && signalReplyToIdAlias) {
-    normalizedArgs.replyTo = signalReplyToIdAlias;
-  }
 
   if (deliveryAliasTarget && explicitTarget && deliveryAliasTarget !== explicitTarget) {
     throw new Error(`Action ${action} received conflicting target and delivery alias values.`);
