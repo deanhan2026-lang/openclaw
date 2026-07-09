@@ -250,7 +250,9 @@ describe("claws cli", () => {
       outputPath: outPath,
       summary: { plugins: 1, workspaceFiles: 0, personas: 1, excluded: 1 },
     });
-    await expect(readFile(outPath, "utf8")).resolves.toContain('"schemaVersion": "openclaw.claw.v1"');
+    await expect(readFile(outPath, "utf8")).resolves.toContain(
+      '"schemaVersion": "openclaw.claw.v1"',
+    );
     const written = JSON.parse(await readFile(outPath, "utf8"));
     expect(written.entries).toEqual([
       expect.objectContaining({ id: "plugin-terminal" }),
