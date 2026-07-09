@@ -223,33 +223,39 @@ function createChannelActionContext(params: {
   };
 }
 
-async function tryPreparePluginSendPayload(params: {
+type PluginSendPayloadPreparation =
+  | { kind: "unavailable" }
+  | { kind: "declined" }
+  | { kind: "prepared"; payload: ReplyPayload };
+
+async function preparePluginSendPayload(params: {
   ctx: OutboundSendContext;
   to: string;
   payload: ReplyPayload;
   replyToId?: string;
   threadId?: string | number;
-}): Promise<ReplyPayload | null> {
+}): Promise<PluginSendPayloadPreparation> {
   const plugin = resolveOutboundChannelPlugin({
     channel: params.ctx.channel,
     cfg: params.ctx.cfg,
   });
   if (!plugin?.outbound) {
-    return null;
+    return { kind: "unavailable" };
   }
   const prepareSendPayload = plugin?.actions?.prepareSendPayload;
   if (!prepareSendPayload) {
-    return null;
+    return { kind: "unavailable" };
   }
-  return (
-    (await prepareSendPayload({
-      ctx: createChannelActionContext({ ctx: params.ctx, action: "send" }),
-      to: params.to,
-      payload: params.payload,
-      replyToId: params.replyToId,
-      threadId: params.threadId,
-    })) ?? null
-  );
+  const payload = await prepareSendPayload({
+    ctx: createChannelActionContext({ ctx: params.ctx, action: "send" }),
+    to: params.to,
+    payload: params.payload,
+    replyToId: params.replyToId,
+    threadId: params.threadId,
+  });
+  // A null result is an ownership decision: the provider-native payload cannot
+  // use durable core delivery, so even a presentation must stay on the action path.
+  return payload ? { kind: "prepared", payload } : { kind: "declined" };
 }
 
 /** Executes a message-tool send through plugin handlers or the core outbound path. */
@@ -283,7 +289,7 @@ export async function executeSendAction(params: {
     audioAsVoice: params.asVoice === true,
   };
   const queuePolicy = params.bestEffort === false ? "required" : "best_effort";
-  const preparedPayload = await tryPreparePluginSendPayload({
+  const pluginPreparation = await preparePluginSendPayload({
     ctx: params.ctx,
     to: params.to,
     payload: defaultPayload,
@@ -296,8 +302,13 @@ export async function executeSendAction(params: {
   });
   const presentation = normalizeMessagePresentation(defaultPayload.presentation);
   const corePayload =
-    preparedPayload ??
-    (presentation && hasCorePresentationDelivery(channelPlugin?.outbound) ? defaultPayload : null);
+    pluginPreparation.kind === "prepared"
+      ? pluginPreparation.payload
+      : pluginPreparation.kind === "unavailable" &&
+          presentation &&
+          hasCorePresentationDelivery(channelPlugin?.outbound)
+        ? defaultPayload
+        : null;
   if (corePayload) {
     throwIfAborted(params.ctx.abortSignal);
     const corePresentation = normalizeMessagePresentation(corePayload.presentation);
@@ -342,7 +353,7 @@ export async function executeSendAction(params: {
       if (!params.ctx.mirror) {
         return;
       }
-      const mirrorText = params.ctx.mirror.text ?? pluginMessage;
+      const mirrorText = params.ctx.mirror.text?.trim() ? params.ctx.mirror.text : pluginMessage;
       const mirrorMediaUrls =
         params.ctx.mirror.mediaUrls ??
         params.mediaUrls ??

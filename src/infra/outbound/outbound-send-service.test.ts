@@ -551,6 +551,60 @@ describe("executeSendAction", () => {
     expect(sendArgs.payloads).toEqual([{ text: "Deployment trend", presentation }]);
   });
 
+  it("keeps presentations on the plugin action path when payload preparation declines", async () => {
+    const presentation: NonNullable<ReplyPayload["presentation"]> = {
+      blocks: [{ type: "text", text: "Portable fallback" }],
+    };
+    const nativeComponents = () => [];
+    const prepareSendPayload = vi.fn(() => null);
+    const plugin: ChannelPlugin = {
+      ...createChannelTestPluginBase({ id: "discord" }),
+      actions: {
+        describeMessageTool: () => ({ actions: ["send"] }),
+        prepareSendPayload,
+        handleAction: async () => ({ content: [], details: { ok: true } }),
+      },
+      outbound: {
+        deliveryMode: "direct",
+        sendText: async () => ({ channel: "discord", messageId: "msg-test" }),
+      },
+    };
+    setActivePluginRegistry(createTestRegistry([{ pluginId: "discord", plugin, source: "test" }]));
+    mocks.dispatchChannelMessageAction.mockResolvedValue(pluginActionResult("msg-plugin"));
+
+    const result = await executeSendAction({
+      ctx: {
+        cfg: {},
+        channel: "discord",
+        params: { to: "channel:123", components: nativeComponents, presentation },
+        dryRun: false,
+        mirror: {
+          sessionKey: "agent:main:discord:channel:123",
+          agentId: "main",
+          text: "",
+        },
+      },
+      to: "channel:123",
+      message: "",
+      payload: { text: "", presentation },
+    });
+
+    expect(result.handledBy).toBe("plugin");
+    expect(prepareSendPayload).toHaveBeenCalledOnce();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+    const actionCtx = expectSingleCallFirstArg(mocks.dispatchChannelMessageAction);
+    expect(actionCtx.params.components).toBe(nativeComponents);
+    expectFields(requireRecord(actionCtx.params, "plugin action params"), {
+      message: "Portable fallback",
+      presentation,
+    });
+    expectMirrorWrite({
+      sessionKey: "agent:main:discord:channel:123",
+      agentId: "main",
+      text: "Portable fallback",
+    });
+  });
+
   it("materializes chart data for legacy gateway delivery", async () => {
     const presentation: NonNullable<ReplyPayload["presentation"]> = {
       blocks: [
