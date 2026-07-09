@@ -4,7 +4,6 @@ import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { sleep as delay } from "../../lib/sleep.mjs";
-import { packOpenClawPackageForDocker } from "../../package-openclaw-for-docker.mjs";
 import { readPositiveIntEnv } from "./env-limits.ts";
 import { exists, readJson } from "./filesystem.ts";
 import { die, repoRoot, run, say, sh } from "./host-command.ts";
@@ -29,7 +28,7 @@ export async function packageBuildCommitFromTgz(tgzPath: string): Promise<string
 }
 
 function resolveNpmPackTarballFilename(value: unknown): string {
-  // npm releases return arrays for registry specs and can key workspace results by package name.
+  // npm 10/11 return arrays; npm 12 keys local-workspace results by package name.
   const result = Array.isArray(value)
     ? value.at(-1)
     : value && typeof value === "object" && "openclaw" in value
@@ -171,26 +170,27 @@ export async function packOpenClaw(input: {
       checkDirty: true,
       requireControlUi: input.requireControlUi,
     });
-    run("node", [
-      "--import",
-      "tsx",
-      "--input-type=module",
-      "--eval",
-      "import { writePackageDistInventory } from './src/infra/package-dist-inventory.ts'; await writePackageDistInventory(process.cwd());",
-    ]);
     const shortHead = run("git", ["rev-parse", "--short", "HEAD"], { quiet: true }).stdout.trim();
     const tgzPath = path.join(input.destination, `openclaw-main-${shortHead}.tgz`);
-    const packedPath = await packOpenClawPackageForDocker(repoRoot, input.destination, {
-      outputName: path.basename(tgzPath),
-    });
+    // The canonical helper inventories the package, bundles private workspace runtime code,
+    // and rejects tarballs that still depend on unpublished workspace packages.
+    const packedPath = run(
+      "node",
+      [
+        "scripts/package-openclaw-for-docker.mjs",
+        "--skip-build",
+        "--source-dir",
+        repoRoot,
+        "--output-dir",
+        input.destination,
+        "--output-name",
+        path.basename(tgzPath),
+      ],
+      { quiet: true },
+    ).stdout.trim();
     if (path.resolve(packedPath) !== path.resolve(tgzPath)) {
       die(`package helper wrote an unexpected tarball: ${packedPath}`);
     }
-    run(
-      "node",
-      ["scripts/check-openclaw-package-tarball.mjs", "--require-bundled-workspace-deps", tgzPath],
-      { quiet: true },
-    );
     const buildCommit = await packageBuildCommitFromTgz(tgzPath);
     if (!buildCommit) {
       die(`failed to read packed build commit from ${tgzPath}`);

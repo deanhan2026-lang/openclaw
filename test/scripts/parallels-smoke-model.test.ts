@@ -438,7 +438,7 @@ describe("Parallels smoke model selection", () => {
     expect(retained).toBe(`${"a".repeat(2)}${"b".repeat(10)}`);
   });
 
-  it("accepts npm pack array and workspace result shapes", () => {
+  it("accepts npm 10/11 array and npm 12 workspace result shapes", () => {
     expect(
       packageArtifactTesting.resolveNpmPackTarballFilename([
         { filename: "openclaw-2026.6.11.tgz" },
