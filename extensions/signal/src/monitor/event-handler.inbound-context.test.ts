@@ -329,7 +329,7 @@ describe("signal createSignalEventHandler inbound context", () => {
         to: "+15550002222",
         replyToId: "1700000000002",
       }),
-    ).resolves.toBe("+15550002222");
+    ).resolves.toBeUndefined();
   });
 
   it("preserves the last debounced message body for native reply quote metadata", async () => {

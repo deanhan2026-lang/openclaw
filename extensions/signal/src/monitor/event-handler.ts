@@ -1207,19 +1207,21 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     }
 
     const senderName = envelope.sourceName ?? senderDisplay;
-    await registerSignalReplyAuthorForInboundMessage({
-      accountId: deps.accountId,
-      to: signalTo,
-      replyToId: messageId,
-      author: senderRecipient,
-    });
-    if (replyToId && replyToId !== messageId) {
+    if (isGroup) {
       await registerSignalReplyAuthorForInboundMessage({
         accountId: deps.accountId,
         to: signalTo,
-        replyToId,
+        replyToId: messageId,
         author: senderRecipient,
       });
+      if (replyToId && replyToId !== messageId) {
+        await registerSignalReplyAuthorForInboundMessage({
+          accountId: deps.accountId,
+          to: signalTo,
+          replyToId,
+          author: senderRecipient,
+        });
+      }
     }
     await inboundDebouncer.enqueue({
       senderName,
