@@ -1006,20 +1006,22 @@ test("sessions.compact passes the selected global agent into embedded compaction
 });
 
 test("sessions.compact mounts a dashboard managed worktree as its workspace", async () => {
-  const { dir } = await createSessionStoreDir();
-  const sessionFile = path.join(dir, "sess-suggested.jsonl");
-  await fs.writeFile(
-    sessionFile,
-    createLinearSessionTranscript("sess-suggested", ["one", "two"]),
-    "utf-8",
-  );
+  const { storePath } = await createSessionStoreDir();
   await writeSessionStore({
     entries: {
       "dashboard:suggested": sessionStoreEntry("sess-suggested", {
-        sessionFile,
         spawnedCwd: "/tmp/suggested-worktree",
       }),
     },
+  });
+  await seedSessionTranscript({
+    sessionId: "sess-suggested",
+    sessionKey: "agent:main:dashboard:suggested",
+    storePath,
+    messages: [
+      { role: "user", content: "one" },
+      { role: "assistant", content: "two" },
+    ],
   });
   const { getRuntimeConfig } = await getGatewayConfigModule();
 

@@ -931,7 +931,6 @@ describe("user turn transcript persistence", () => {
       await expect(recorder.persistApproved()).resolves.toBeUndefined();
       await expect(
         readTranscriptMessages({
-          agentId: "main",
           sessionId: "session-1",
           sessionKey: "agent:main:main",
           storePath,

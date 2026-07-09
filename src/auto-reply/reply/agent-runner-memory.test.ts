@@ -73,6 +73,8 @@ function createReplyOperation(): TestReplyOperation {
     abortForRestart: vi.fn(() => true),
     markTerminalRecovery: vi.fn(),
     markAcceptedSteeredInboundAudio: vi.fn(),
+    markWaitingForDeferredMaintenance: vi.fn(),
+    markDeferredMaintenanceWaitEnded: vi.fn(),
   };
 }
 

@@ -33,6 +33,7 @@ import {
   createUserTurnTranscriptRecorder,
   type UserTurnTranscriptRecorder,
 } from "../sessions/user-turn-transcript.js";
+import { createTestUserTurnTranscriptTarget } from "../sessions/user-turn-transcript.test-support.js";
 import { runSkillResearchAutoCapture } from "../skills/research/autocapture.js";
 import { captureEnv, setTestEnvValue } from "../test-utils/env.js";
 import {
@@ -283,9 +284,9 @@ async function readTranscriptMessages(sessionFile: string): Promise<unknown[]> {
   const sessionId = path.basename(sessionFile, ".jsonl");
   const events = await loadTranscriptEvents({
     agentId: "main",
-    sessionFile,
     sessionId,
     sessionKey: "agent:main:main",
+    storePath: path.join(path.dirname(sessionFile), "sessions.json"),
   });
   return events.flatMap((entry) =>
     typeof entry === "object" && entry !== null && "message" in entry ? [entry.message] : [],
@@ -318,12 +319,12 @@ function createCliUserTurnRecorder(params: {
 }) {
   return createUserTurnTranscriptRecorder({
     input: { text: params.text },
-    target: {
-      transcriptPath: params.sessionFile,
+    target: createTestUserTurnTranscriptTarget({
       sessionId: "s1",
       sessionKey: params.sessionKey ?? "agent:main:main",
       cwd: params.workspaceDir,
-    },
+      storePath: path.join(path.dirname(params.sessionFile), "sessions.json"),
+    }),
   });
 }
 
@@ -3003,12 +3004,13 @@ describe("runCliAgent reliability", () => {
     );
     const { dir, sessionFile } = createSessionFile();
     const recorder = createUserTurnTranscriptRecorder({
-      target: {
-        transcriptPath: sessionFile,
+      target: createTestUserTurnTranscriptTarget({
         sessionId: "s1",
+        sessionKey: "agent:main:main",
         agentId: "main",
         cwd: dir,
-      },
+        storePath: path.join(path.dirname(sessionFile), "sessions.json"),
+      }),
     });
     recorder.markBlocked();
 
@@ -3454,12 +3456,12 @@ describe("runCliAgent reliability", () => {
         timestamp: 123,
         idempotencyKey: "cli-recorder:user",
       },
-      target: {
-        transcriptPath: sessionFile,
+      target: createTestUserTurnTranscriptTarget({
         sessionId: "s1",
         sessionKey: "agent:main:main",
         cwd: dir,
-      },
+        storePath: path.join(path.dirname(sessionFile), "sessions.json"),
+      }),
       updateMode: "none",
     });
 
@@ -3521,12 +3523,12 @@ describe("runCliAgent reliability", () => {
     const { dir, sessionFile } = createSessionFile();
     const recorder = createUserTurnTranscriptRecorder({
       input: { text: "blocked user turn" },
-      target: {
-        transcriptPath: sessionFile,
+      target: createTestUserTurnTranscriptTarget({
         sessionId: "s1",
         sessionKey: "agent:main:main",
         cwd: dir,
-      },
+        storePath: path.join(path.dirname(sessionFile), "sessions.json"),
+      }),
       beforeMessageWrite: runAgentHarnessBeforeMessageWriteHook,
     });
 

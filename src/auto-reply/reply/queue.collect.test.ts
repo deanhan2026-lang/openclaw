@@ -9,6 +9,7 @@ import {
 } from "../../config/sessions/session-accessor.js";
 import { formatSqliteSessionFileMarker } from "../../config/sessions/sqlite-marker.js";
 import { createUserTurnTranscriptRecorder } from "../../sessions/user-turn-transcript.js";
+import { createTestUserTurnTranscriptTarget } from "../../sessions/user-turn-transcript.test-support.js";
 import type { FollowupRun, QueueSettings } from "./queue.js";
 import {
   clearFollowupQueue,
@@ -3341,7 +3342,7 @@ describe("followup queue collect routing", () => {
     const createRecorder = (text: string, mediaPath: string) =>
       createUserTurnTranscriptRecorder({
         input: { text, media: [{ path: mediaPath, contentType: "image/png" }] },
-        target: { transcriptPath: "/tmp/session.jsonl" },
+        target: createTestUserTurnTranscriptTarget(),
         updateMode: "none",
       });
     const firstRecorder = createRecorder("first transcript", "/tmp/first.png");
@@ -3445,7 +3446,7 @@ describe("followup queue collect routing", () => {
     const createRecorder = (text: string) =>
       createUserTurnTranscriptRecorder({
         input: { text },
-        target: { transcriptPath: "/tmp/session.jsonl" },
+        target: createTestUserTurnTranscriptTarget(),
         updateMode: "none",
       });
 

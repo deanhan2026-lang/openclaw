@@ -18,6 +18,7 @@ import {
 import { clearSessionStoreCacheForTest } from "../../config/sessions/store.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { createUserTurnTranscriptRecorder } from "../../sessions/user-turn-transcript.js";
+import { createTestUserTurnTranscriptTarget } from "../../sessions/user-turn-transcript.test-support.js";
 import { closeOpenClawAgentDatabasesForTest } from "../../state/openclaw-agent-db.js";
 import { captureEnv, setTestEnvValue } from "../../test-utils/env.js";
 import { saveAuthProfileStore } from "../auth-profiles/store.js";
@@ -2003,13 +2004,14 @@ describe("CLI attempt execution", () => {
     runCliAgentMock.mockResolvedValueOnce(makeCliResult("timestamped cli"));
     const userTurnTranscriptRecorder = createUserTurnTranscriptRecorder({
       input: { text: "canonical timestamp question" },
-      target: {
-        transcriptPath: path.join(tmpDir, "session.jsonl"),
+      target: createTestUserTurnTranscriptTarget({
         sessionId: sessionEntry.sessionId,
         sessionKey,
+        sessionEntry,
         agentId: "main",
         cwd: tmpDir,
-      },
+        storePath,
+      }),
     });
     await runAgentAttempt({
       providerOverride: "claude-cli",
@@ -2282,13 +2284,13 @@ describe("CLI attempt execution", () => {
 
   it("forwards canonical transcript text without replacing embedded image content", async () => {
     const recorder = createUserTurnTranscriptRecorder({
-      target: {
-        transcriptPath: path.join(tmpDir, "embedded-image-turn.jsonl"),
+      target: createTestUserTurnTranscriptTarget({
         sessionId: "session-embedded-image-turn",
         sessionKey: "agent:main:direct:embedded-image-turn",
         agentId: "main",
         cwd: tmpDir,
-      },
+        storePath,
+      }),
     });
     const images = [{ type: "image" as const, data: "aGVsbG8=", mimeType: "image/png" }];
     const embeddedArg = await runOpenClawEmbeddedAttemptForTest({
