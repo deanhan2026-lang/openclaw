@@ -26,14 +26,6 @@ type MemoryReplyAuthorRecord = SignalReplyAuthorRecord & {
 const memoryReplyAuthors = new Map<string, MemoryReplyAuthorRecord>();
 let persistentStoreDisabled = false;
 
-function resolveAccountKey(accountId?: string | null): string {
-  return normalizeLowercaseStringOrEmpty(normalizeOptionalString(accountId) ?? DEFAULT_ACCOUNT_ID);
-}
-
-function resolveConversationKey(to: string): string | undefined {
-  return normalizeSignalMessagingTarget(to);
-}
-
 function openSignalReplyAuthorStore() {
   if (persistentStoreDisabled) {
     return undefined;
@@ -59,12 +51,15 @@ function buildSignalReplyAuthorStoreKey(params: {
   to: string;
   replyToId?: string | null;
 }): string | undefined {
-  const conversationKey = resolveConversationKey(params.to);
+  const conversationKey = normalizeSignalMessagingTarget(params.to);
   const replyToId = normalizeOptionalString(params.replyToId);
   if (!conversationKey || !replyToId) {
     return undefined;
   }
-  return `account=${resolveAccountKey(params.accountId)}|to=${conversationKey}|id=${replyToId}`;
+  const accountKey = normalizeLowercaseStringOrEmpty(
+    normalizeOptionalString(params.accountId) ?? DEFAULT_ACCOUNT_ID,
+  );
+  return `account=${accountKey}|to=${conversationKey}|id=${replyToId}`;
 }
 
 function pruneMemoryReplyAuthors(now = Date.now()): void {
@@ -91,14 +86,17 @@ export async function registerSignalReplyAuthorForInboundMessage(params: {
   const store = openSignalReplyAuthorStore();
   const key = buildSignalReplyAuthorStoreKey(params);
   const author = normalizeOptionalString(params.author);
-  const conversationKey = resolveConversationKey(params.to);
+  const conversationKey = normalizeSignalMessagingTarget(params.to);
   const replyToId = normalizeOptionalString(params.replyToId);
+  const accountKey = normalizeLowercaseStringOrEmpty(
+    normalizeOptionalString(params.accountId) ?? DEFAULT_ACCOUNT_ID,
+  );
   if (!store || !key || !author || !conversationKey || !replyToId) {
     if (key && author && conversationKey && replyToId) {
       const registeredAt = Date.now();
       memoryReplyAuthors.set(key, {
         author,
-        accountId: resolveAccountKey(params.accountId),
+        accountId: accountKey,
         conversationKey,
         replyToId,
         registeredAt,
@@ -111,7 +109,7 @@ export async function registerSignalReplyAuthorForInboundMessage(params: {
   const registeredAt = Date.now();
   memoryReplyAuthors.set(key, {
     author,
-    accountId: resolveAccountKey(params.accountId),
+    accountId: accountKey,
     conversationKey,
     replyToId,
     registeredAt,
@@ -121,7 +119,7 @@ export async function registerSignalReplyAuthorForInboundMessage(params: {
   try {
     await store.register(key, {
       author,
-      accountId: resolveAccountKey(params.accountId),
+      accountId: accountKey,
       conversationKey,
       replyToId,
       registeredAt,
