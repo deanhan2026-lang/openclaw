@@ -626,9 +626,13 @@ async function activateSetupInferenceUnredacted(
     let codexPluginPatch: unknown;
     let testPlan = plan;
     if (params.kind === "codex-cli") {
+      const { stripPendingPluginInstallRecords } =
+        await import("../cli/plugins-install-record-commit.js");
       // This explicit Codex CLI choice owns its runtime independently of the
       // user's existing OpenAI provider route (which may use a custom base URL).
-      const codexInstallBase = applyMergePatch(cfg, CODEX_CLI_RUNTIME_PATCH) as OpenClawConfig;
+      const codexInstallBase = stripPendingPluginInstallRecords(
+        applyMergePatch(cfg, CODEX_CLI_RUNTIME_PATCH) as OpenClawConfig,
+      );
       const enabledCodexBase = enablePluginInConfig(codexInstallBase, "codex");
       if (!enabledCodexBase.enabled) {
         return {
@@ -673,18 +677,18 @@ async function activateSetupInferenceUnredacted(
             mode: "none",
             reason: "Crestodian records the installed Codex runtime before probing",
           },
-          transform: (current) => ({
-            nextConfig: {
-              ...current,
-              plugins: {
-                ...current.plugins,
-                installs: {
-                  ...current.plugins?.installs,
-                  codex: pendingCodexInstall,
+          transform: (current) => {
+            const strippedCurrent = stripPendingPluginInstallRecords(current);
+            return {
+              nextConfig: {
+                ...strippedCurrent,
+                plugins: {
+                  ...strippedCurrent.plugins,
+                  installs: { codex: pendingCodexInstall },
                 },
               },
-            },
-          }),
+            };
+          },
         });
       }
       const enabledCodex = enablePluginInConfig(ensured.cfg, "codex");
@@ -697,10 +701,8 @@ async function activateSetupInferenceUnredacted(
       }
       // Enablement and the model-scoped runtime pin remain transient probe inputs.
       // Persist them only after completion; the managed install record is durable above.
-      const { stripPendingPluginInstallRecords } =
-        await import("../cli/plugins-install-record-commit.js");
       const codexProbePatch = createMergePatch(cfg, enabledCodex.config);
-      const stagedCodexConfig = stripPendingPluginInstallRecords(enabledCodex.config, ["codex"]);
+      const stagedCodexConfig = stripPendingPluginInstallRecords(enabledCodex.config);
       codexPluginPatch = createMergePatch(cfg, stagedCodexConfig);
       testPlan = {
         ...plan,
@@ -727,6 +729,8 @@ async function activateSetupInferenceUnredacted(
     if (codexPluginPatch !== undefined) {
       // Persist success-gated enablement and the model-scoped runtime pin. The managed
       // install record was committed before the live probe.
+      const { stripPendingPluginInstallRecords } =
+        await import("../cli/plugins-install-record-commit.js");
       const transformConfig =
         deps.transformConfigWithPendingPluginInstalls ??
         (await import("../cli/plugins-install-record-commit.js"))
@@ -736,7 +740,10 @@ async function activateSetupInferenceUnredacted(
         // registry refresh below makes the newly installed plugin available without a restart.
         afterWrite: { mode: "none", reason: "Crestodian setup finalizes config after refresh" },
         transform: (current) => ({
-          nextConfig: applyMergePatch(current, codexPluginPatch) as OpenClawConfig,
+          nextConfig: applyMergePatch(
+            stripPendingPluginInstallRecords(current),
+            codexPluginPatch,
+          ) as OpenClawConfig,
         }),
       });
       const refreshPluginRegistry =

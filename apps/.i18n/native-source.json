@@ -18162,8 +18162,24 @@
       "id": "native.apple.bdf53a219bdfbe0d"
     },
     {
+      "kind": "conditional-branch",
+      "line": 197,
+      "path": "apps/macos/Sources/OpenClaw/OnboardingCrestodianChat.swift",
+      "source": "Crestodian was interrupted. Restart to try again.",
+      "surface": "apple",
+      "id": "native.apple.722995710f90cfc6"
+    },
+    {
+      "kind": "conditional-branch",
+      "line": 197,
+      "path": "apps/macos/Sources/OpenClaw/OnboardingCrestodianChat.swift",
+      "source": "The Gateway connection changed. Restart Crestodian to reconnect.",
+      "surface": "apple",
+      "id": "native.apple.6596e00d4333081e"
+    },
+    {
       "kind": "ui-call",
-      "line": 138,
+      "line": 222,
       "path": "apps/macos/Sources/OpenClaw/OnboardingCrestodianChat.swift",
       "source": "Crestodian is working…",
       "surface": "apple",
@@ -18171,7 +18187,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 163,
+      "line": 247,
       "path": "apps/macos/Sources/OpenClaw/OnboardingCrestodianChat.swift",
       "source": "Restart",
       "surface": "apple",
@@ -18179,7 +18195,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 174,
+      "line": 258,
       "path": "apps/macos/Sources/OpenClaw/OnboardingCrestodianChat.swift",
       "source": "Enter secret…",
       "surface": "apple",
@@ -18187,7 +18203,7 @@
     },
     {
       "kind": "ui-call",
-      "line": 176,
+      "line": 260,
       "path": "apps/macos/Sources/OpenClaw/OnboardingCrestodianChat.swift",
       "source": "Reply to Crestodian… (yes sets everything up)",
       "surface": "apple",

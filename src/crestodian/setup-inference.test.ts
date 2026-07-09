@@ -8,6 +8,7 @@ import {
 } from "../agents/auth-profiles/oauth-test-utils.js";
 import { upsertAuthProfileWithLock } from "../agents/auth-profiles/profiles.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import type { PluginInstallRecord } from "../config/types.plugins.js";
 import { withoutPluginInstallRecords } from "../plugins/installed-plugin-index-records.js";
 import type { ProviderAuthChoiceMetadata } from "../plugins/provider-auth-choices.js";
 import type { ProviderPlugin } from "../plugins/types.js";
@@ -763,6 +764,109 @@ describe("activateSetupInference", () => {
       installPath: "/tmp/plugins/codex",
     });
     expect(pendingCodexInstalls[1]).toBeUndefined();
+  });
+
+  it("commits only the refreshed codex record when authored install metadata is stale", async () => {
+    const staleAuthoredRecords = {
+      codex: {
+        source: "npm" as const,
+        spec: "@openclaw/codex@1.0.0",
+        installPath: "/tmp/plugins/codex-v1",
+      },
+      unrelated: {
+        source: "npm" as const,
+        spec: "@openclaw/unrelated@1.0.0",
+        installPath: "/tmp/plugins/unrelated-v1",
+      },
+    };
+    const canonicalRecords = {
+      codex: {
+        source: "npm" as const,
+        spec: "@openclaw/codex@2.0.0",
+        installPath: "/tmp/plugins/codex-v2",
+      },
+      unrelated: {
+        source: "npm" as const,
+        spec: "@openclaw/unrelated@2.0.0",
+        installPath: "/tmp/plugins/unrelated-v2",
+      },
+    };
+    const refreshedCodexRecord = {
+      source: "npm" as const,
+      spec: "@openclaw/codex@3.0.0",
+      installPath: "/tmp/plugins/codex-v3",
+    };
+    const sourceConfig = {
+      plugins: { installs: staleAuthoredRecords },
+    } satisfies OpenClawConfig;
+    const runtimeConfig = {
+      plugins: { installs: canonicalRecords },
+    } satisfies OpenClawConfig;
+    const ensureCodex = vi.fn(async (params: { cfg: OpenClawConfig }) => ({
+      cfg: {
+        ...params.cfg,
+        plugins: {
+          ...params.cfg.plugins,
+          installs: { codex: refreshedCodexRecord },
+        },
+      },
+      required: true,
+      installed: true,
+      status: "installed" as const,
+    }));
+    let persistedConfig: OpenClawConfig = sourceConfig;
+    let installIndex: Record<string, PluginInstallRecord> = structuredClone(canonicalRecords);
+    const pendingInstallRecords: unknown[] = [];
+    const transformConfig = vi.fn(
+      async (params: { transform: (config: OpenClawConfig) => { nextConfig: OpenClawConfig } }) => {
+        const transformed = params.transform(persistedConfig).nextConfig;
+        const pending = transformed.plugins?.installs;
+        pendingInstallRecords.push(pending);
+        installIndex = { ...installIndex, ...pending };
+        persistedConfig = withoutPluginInstallRecords(transformed);
+        return { nextConfig: persistedConfig };
+      },
+    );
+
+    const result = await activateSetupInference({
+      kind: "codex-cli",
+      workspace: "/tmp/openclaw-workspace",
+      surface: "gateway",
+      runtime,
+      deps: {
+        readConfigFileSnapshot: vi.fn(async () => ({
+          exists: true,
+          valid: true,
+          path: "/tmp/openclaw.json",
+          issues: [],
+          config: sourceConfig,
+          runtimeConfig,
+        })) as never,
+        ensureCodexRuntimePlugin: ensureCodex as never,
+        runEmbeddedAgent: vi.fn(async () => ({
+          meta: { finalAssistantVisibleText: "OK" },
+        })) as never,
+        transformConfigWithPendingPluginInstalls: transformConfig as never,
+        refreshPluginRegistryAfterConfigMutation: vi.fn(async () => {}) as never,
+        applySetup: vi.fn(async () => ({ configPath: "/tmp/openclaw.json", lines: [] })) as never,
+        createTempDir: makeTempDir,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(ensureCodex).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cfg: expect.not.objectContaining({
+          plugins: expect.objectContaining({ installs: expect.anything() }),
+        }),
+      }),
+    );
+    expect(pendingInstallRecords).toStrictEqual([{ codex: refreshedCodexRecord }, undefined]);
+    expect(installIndex).toStrictEqual({
+      codex: refreshedCodexRecord,
+      unrelated: canonicalRecords.unrelated,
+    });
+    expect(persistedConfig.plugins?.installs).toBeUndefined();
   });
 
   it("does not run or persist when the codex runtime install fails", async () => {
