@@ -34,7 +34,7 @@ struct OnboardingViewSmokeTests {
         #expect(!order.contains(8))
     }
 
-    @Test func `fresh local setup installs CLI before the Crestodian chat`() {
+    @Test func `fresh local setup installs CLI before inference setup`() {
         let order = OnboardingView.pageOrder(
             for: .local,
             showOnboardingChat: false,

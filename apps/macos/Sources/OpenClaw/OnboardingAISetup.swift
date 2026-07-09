@@ -508,15 +508,17 @@ struct OnboardingAISetupView: View {
             self.manualSection
         }
 
-        HStack {
-            Spacer(minLength: 0)
-            Button {
-                self.showCrestodianChat = true
-            } label: {
-                Label("Need help? Chat with Crestodian", systemImage: "questionmark.bubble")
-                    .font(.caption)
+        if CrestodianAvailability.shouldShow(configuredModel: self.model.connectedModelRef) {
+            HStack {
+                Spacer(minLength: 0)
+                Button {
+                    self.showCrestodianChat = true
+                } label: {
+                    Label("Need help? Chat with Crestodian", systemImage: "questionmark.bubble")
+                        .font(.caption)
+                }
+                .buttonStyle(.link)
             }
-            .buttonStyle(.link)
         }
     }
 

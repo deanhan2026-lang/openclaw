@@ -4,8 +4,8 @@ import OpenClawIPC
 import SwiftUI
 
 /// Onboarding talks to Crestodian over the gateway `crestodian.chat` RPC.
-/// The conversation is the setup: no wizard steps, no forms. Crestodian works
-/// before any model is configured, so this page functions on a fresh machine.
+/// The conversation is available after structured setup establishes working
+/// inference, so the model-backed helper can answer reliably.
 @MainActor
 @Observable
 final class CrestodianOnboardingChatModel {

@@ -8,18 +8,30 @@ struct SettingsRootView: View {
     @State private var monitoringPermissions = false
     @State private var selectedTab: SettingsTab = .general
     @State private var cachedTabs: Set<SettingsTab>
+    @State private var inferenceConfiguration: InferenceConfiguration
+    @State private var inferenceRefreshTrigger = InferenceRefreshTrigger.invalidate(UUID())
+    @State private var deferredTab: SettingsTab?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var snapshotPaths: (configPath: String?, stateDir: String?) = (nil, nil)
     let updater: UpdaterProviding?
     private let isPreview = ProcessInfo.processInfo.isPreview
     private let isNixMode = ProcessInfo.processInfo.isNixMode
 
-    init(state: AppState, updater: UpdaterProviding?, initialTab: SettingsTab? = nil) {
+    init(
+        state: AppState,
+        updater: UpdaterProviding?,
+        initialTab: SettingsTab? = nil,
+        configuredInferenceModel: String? = nil)
+    {
         let initial = initialTab ?? .general
         self.state = state
         self.updater = updater
         self._selectedTab = State(initialValue: initial)
         self._cachedTabs = State(initialValue: [initial])
+        self._inferenceConfiguration = State(initialValue: configuredInferenceModel.map {
+            .loaded($0)
+        } ?? .loading)
+        self._deferredTab = State(initialValue: nil)
     }
 
     var body: some View {
@@ -45,13 +57,15 @@ struct SettingsRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openclawSelectSettingsTab)) { note in
             if let tab = note.object as? SettingsTab {
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
-                    self.selectedTab = self.validTab(for: tab)
+                    self.selectRequestedTab(tab)
                 }
             }
         }
         .onAppear {
             if let pending = SettingsTabRouter.consumePending() {
-                self.selectedTab = self.validTab(for: pending)
+                self.selectRequestedTab(pending)
+            } else {
+                self.selectRequestedTab(self.selectedTab)
             }
             self.cacheSelectedTab()
             self.updatePermissionMonitoring(for: self.selectedTab)
@@ -61,27 +75,47 @@ struct SettingsRootView: View {
                 self.selectedTab = .general
             }
         }
+        .onChange(of: self.inferenceConfiguration) { _, configuration in
+            if !CrestodianAvailability.shouldShow(configuredModel: configuration.configuredModel),
+               self.selectedTab == .crestodian
+            {
+                self.selectedTab = .general
+            }
+        }
         .onChange(of: self.selectedTab) { _, newValue in
             self.cachedTabs.insert(newValue)
             self.updatePermissionMonitoring(for: newValue)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            guard self.selectedTab == .permissions else { return }
-            Task { await self.refreshPerms() }
+            if self.selectedTab == .permissions {
+                Task { await self.refreshPerms() }
+            }
+            self.scheduleInferenceRefresh(clearPrevious: false)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openclawConfigDidChange)) { _ in
+            self.scheduleInferenceRefresh(clearPrevious: true)
         }
         .onDisappear { self.stopPermissionMonitoring() }
         .task {
             guard !self.isPreview else { return }
             await self.refreshPerms()
         }
-        .task(id: self.state.connectionMode) {
+        .onChange(of: self.state.connectionMode) { _, _ in
+            self.scheduleInferenceRefresh(clearPrevious: true)
+        }
+        .task(id: self.inferenceRefreshTrigger) {
             guard !self.isPreview else { return }
             await self.refreshSnapshotPaths()
+            await self.refreshInferenceConfiguration(
+                clearPrevious: self.inferenceRefreshTrigger.clearsPrevious)
         }
     }
 
     private var visibleGroups: [SettingsTabGroup] {
-        SettingsTabGroup.defaultGroups(showDebug: self.state.debugPaneEnabled)
+        SettingsTabGroup.defaultGroups(
+            showDebug: self.state.debugPaneEnabled,
+            showCrestodian: CrestodianAvailability.shouldShow(
+                configuredModel: self.inferenceConfiguration.configuredModel))
     }
 
     private var sidebarSelection: Binding<SettingsTab?> {
@@ -89,7 +123,7 @@ struct SettingsRootView: View {
             get: { self.selectedTab },
             set: { tab in
                 guard let tab else { return }
-                self.selectedTab = self.validTab(for: tab)
+                self.selectRequestedTab(tab)
             })
     }
 
@@ -200,8 +234,49 @@ struct SettingsRootView: View {
         }
     }
 
-    private func validTab(for requested: SettingsTab) -> SettingsTab {
-        if requested == .debug, !self.state.debugPaneEnabled { return .general }
+    private func selectRequestedTab(_ requested: SettingsTab) {
+        let selection = Self.tabSelection(
+            requested: requested,
+            showDebug: self.state.debugPaneEnabled,
+            inferenceConfiguration: self.inferenceConfiguration)
+        self.deferredTab = selection.deferred
+        self.selectedTab = selection.selected
+    }
+
+    struct TabSelection: Equatable {
+        let selected: SettingsTab
+        let deferred: SettingsTab?
+    }
+
+    static func tabSelection(
+        requested: SettingsTab,
+        showDebug: Bool,
+        inferenceConfiguration: InferenceConfiguration) -> TabSelection
+    {
+        let showCrestodian = CrestodianAvailability.shouldShow(
+            configuredModel: inferenceConfiguration.configuredModel)
+        let deferred = requested == .crestodian && !showCrestodian && !inferenceConfiguration.isLoaded
+            ? requested
+            : nil
+        return TabSelection(
+            selected: Self.normalizedTab(
+                requested,
+                showDebug: showDebug,
+                showCrestodian: showCrestodian),
+            deferred: deferred)
+    }
+
+    static func normalizedTab(
+        _ requested: SettingsTab,
+        showDebug: Bool,
+        showCrestodian: Bool) -> SettingsTab
+    {
+        if requested == .debug, !showDebug {
+            return .general
+        }
+        if requested == .crestodian, !showCrestodian {
+            return .general
+        }
         return requested
     }
 
@@ -213,6 +288,86 @@ struct SettingsRootView: View {
     private func refreshSnapshotPaths() async {
         let paths = await GatewayConnection.shared.snapshotPaths()
         self.snapshotPaths = paths
+    }
+
+    @MainActor
+    private func refreshInferenceConfiguration(clearPrevious: Bool) async {
+        if clearPrevious {
+            self.inferenceConfiguration = .loading
+        }
+        guard let route = await GatewayConnection.shared.captureRoute() else { return }
+        do {
+            let model = try await GatewayConnection.shared.configuredInferenceModel(
+                ifCurrentRoute: route)
+            guard !Task.isCancelled else { return }
+            self.inferenceConfiguration = Self.configurationAfterInferenceRefresh(
+                current: self.inferenceConfiguration,
+                result: .confirmed(model))
+            if let deferredTab = self.deferredTab {
+                self.selectRequestedTab(deferredTab)
+            }
+        } catch is CancellationError {
+            // A route change or task cancellation must not apply stale gateway state.
+        } catch {
+            guard !Task.isCancelled else { return }
+            self.inferenceConfiguration = Self.configurationAfterInferenceRefresh(
+                current: self.inferenceConfiguration,
+                result: .failed)
+        }
+    }
+
+    enum InferenceConfiguration: Equatable {
+        case loading
+        case loaded(String?)
+
+        var configuredModel: String? {
+            switch self {
+            case .loading: nil
+            case let .loaded(model): model
+            }
+        }
+
+        var isLoaded: Bool {
+            if case .loaded = self {
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    enum InferenceRefreshResult {
+        case confirmed(String?)
+        case failed
+    }
+
+    enum InferenceRefreshTrigger: Equatable {
+        case invalidate(UUID)
+        case verify(UUID)
+
+        var clearsPrevious: Bool {
+            switch self {
+            case .invalidate: true
+            case .verify: false
+            }
+        }
+    }
+
+    static func configurationAfterInferenceRefresh(
+        current: InferenceConfiguration,
+        result: InferenceRefreshResult) -> InferenceConfiguration
+    {
+        switch result {
+        case let .confirmed(model): .loaded(model)
+        case .failed: current
+        }
+    }
+
+    private func scheduleInferenceRefresh(clearPrevious: Bool) {
+        if clearPrevious {
+            self.inferenceConfiguration = .loading
+        }
+        self.inferenceRefreshTrigger = clearPrevious ? .invalidate(UUID()) : .verify(UUID())
     }
 
     @MainActor
@@ -231,7 +386,7 @@ struct SettingsRootView: View {
     }
 }
 
-private struct SettingsTabGroup: Identifiable {
+struct SettingsTabGroup: Identifiable {
     let title: String
     let tabs: [SettingsTab]
 
@@ -239,9 +394,12 @@ private struct SettingsTabGroup: Identifiable {
         self.title
     }
 
-    static func defaultGroups(showDebug: Bool) -> [SettingsTabGroup] {
+    static func defaultGroups(showDebug: Bool, showCrestodian: Bool) -> [SettingsTabGroup] {
+        let basicTabs: [SettingsTab] = showCrestodian
+            ? [.general, .connection, .permissions, .voiceWake, .crestodian]
+            : [.general, .connection, .permissions, .voiceWake]
         var groups = [
-            SettingsTabGroup(title: "Basics", tabs: [.general, .connection, .permissions, .voiceWake, .crestodian]),
+            SettingsTabGroup(title: "Basics", tabs: basicTabs),
             SettingsTabGroup(title: "Automation", tabs: [.channels, .skills, .cron, .execApprovals]),
             SettingsTabGroup(title: "Data", tabs: [.sessions, .instances]),
             SettingsTabGroup(title: "Advanced", tabs: [.config]),
@@ -327,7 +485,11 @@ extension Notification.Name {
 struct SettingsRootView_Previews: PreviewProvider {
     static var previews: some View {
         ForEach(SettingsTab.allCases, id: \.self) { tab in
-            SettingsRootView(state: .preview, updater: DisabledUpdaterController(), initialTab: tab)
+            SettingsRootView(
+                state: .preview,
+                updater: DisabledUpdaterController(),
+                initialTab: tab,
+                configuredInferenceModel: tab == .crestodian ? "openai/gpt-5.5" : nil)
                 .previewDisplayName(tab.title)
                 .frame(width: SettingsTab.windowWidth, height: SettingsTab.windowHeight)
         }

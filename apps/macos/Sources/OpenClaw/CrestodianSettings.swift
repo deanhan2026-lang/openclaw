@@ -1,10 +1,14 @@
 import SwiftUI
 
+enum CrestodianAvailability {
+    static func shouldShow(configuredModel: String?) -> Bool {
+        !(configuredModel?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+}
+
 /// Settings pane hosting the Crestodian setup/repair chat.
 ///
-/// Crestodian answers even when no model is configured (deterministic engine
-/// on the gateway), so this pane is the "always works" place to fix config,
-/// switch models, connect channels, or run doctor — in plain language.
+/// The parent settings view exposes this pane only after inference is configured.
 struct CrestodianSettings: View {
     let isActive: Bool
     @State private var chat = CrestodianOnboardingChatModel(
@@ -15,8 +19,8 @@ struct CrestodianSettings: View {
         VStack(alignment: .leading, spacing: 20) {
             SettingsPageHeader(
                 title: "Crestodian",
-                subtitle: "Your setup helper. It can check status, fix config, switch models, " +
-                    "and connect channels — even when the agent itself is not working.")
+                subtitle: "Your AI-powered setup helper. It can check status, fix config, " +
+                    "switch models, and connect channels.")
 
             SettingsCardGroup("Chat") {
                 CrestodianOnboardingChatView(model: self.chat)

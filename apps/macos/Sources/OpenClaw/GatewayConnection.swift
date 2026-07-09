@@ -388,6 +388,33 @@ actor GatewayConnection {
         return SessionRoutingIdentity(defaultAgentID: result.defaultid, contract: contract)
     }
 
+    func configuredInferenceModel(ifCurrentRoute route: Route) async throws -> String? {
+        let data = try await request(
+            method: "agents.list",
+            params: [:],
+            timeoutMs: 15000,
+            ifCurrentRoute: route)
+        guard let cfg = try? await configProvider(),
+              route.generation == self.routeGeneration,
+              route.matches(cfg),
+              configuredURL == route.url,
+              configuredToken == route.token,
+              configuredPassword == route.password
+        else {
+            throw CancellationError()
+        }
+        return try Self.decodeConfiguredInferenceModel(data)
+    }
+
+    static func decodeConfiguredInferenceModel(_ data: Data) throws -> String? {
+        let result = try JSONDecoder().decode(AgentsListResult.self, from: data)
+        let primary = result.agents
+            .first(where: { $0.id == result.defaultid })?
+            .model?["primary"]?.value as? String
+        let trimmed = primary?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     func authSource() async -> GatewayAuthSource? {
         guard let client else { return nil }
         return await client.authSource()
