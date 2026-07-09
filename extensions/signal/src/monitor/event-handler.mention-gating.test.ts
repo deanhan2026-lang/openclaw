@@ -198,6 +198,34 @@ describe("signal mention gating", () => {
     ).resolves.toBe("+15550001111");
   });
 
+  it("records edited target reply authors for skipped group messages", async () => {
+    const { handler } = createMentionGatedHistoryHandler();
+
+    await handler(
+      createSignalReceiveEvent({
+        timestamp: 1700000000999,
+        editMessage: {
+          targetSentTimestamp: 1700000000000,
+          dataMessage: {
+            timestamp: 1700000000999,
+            message: "edited without mention",
+            attachments: [],
+            groupInfo: { groupId: "g1", groupName: "Test Group" },
+          },
+        },
+      }),
+    );
+
+    expect(capturedCtx).toBeUndefined();
+    await expect(
+      resolveSignalReplyAuthorWithPersistence({
+        accountId: "default",
+        to: "group:g1",
+        replyToId: "1700000000000",
+      }),
+    ).resolves.toBe("+15550001111");
+  });
+
   it("records attachment placeholder in pending history for skipped attachment-only group messages", async () => {
     await expectSkippedGroupHistory(
       { message: "", attachments: [{ id: "a1" }] },

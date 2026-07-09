@@ -1070,6 +1070,14 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
         replyToId: messageId,
         author: senderRecipient,
       });
+      if (replyToId && replyToId !== messageId) {
+        await registerSignalReplyAuthorForInboundMessage({
+          accountId: deps.accountId,
+          to: signalTo,
+          replyToId,
+          author: senderRecipient,
+        });
+      }
       const signalGroupPolicy = resolveChannelGroupPolicy({
         cfg: deps.cfg,
         channel: "signal",
