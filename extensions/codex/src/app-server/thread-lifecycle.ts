@@ -1,4 +1,5 @@
 // Codex plugin module implements thread lifecycle behavior.
+import { createHash } from "node:crypto";
 import {
   buildSkillWorkshopPromptSection,
   embeddedAgentLog,
@@ -1671,9 +1672,10 @@ export function areCodexDynamicToolFingerprintsCompatible(params: {
 }
 
 function fingerprintDynamicTools(dynamicTools: CodexDynamicToolSpec[]): string {
-  return JSON.stringify(
+  const canonical = JSON.stringify(
     dynamicTools.map(fingerprintDynamicToolSpec).toSorted(compareJsonFingerprint),
   );
+  return "sha256:" + createHash("sha256").update(canonical).digest("hex");
 }
 
 function fingerprintUserMcpServersConfigPatch(
