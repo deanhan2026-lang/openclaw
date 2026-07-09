@@ -411,12 +411,13 @@ describe("channel-auth", () => {
         channelSetups: [],
       });
 
-    await runChannelLogin({ channel: "whatsapp" }, runtime);
+    await runChannelLogin({ channel: "whatsapp", acknowledgeNonClawHubInstall: true }, runtime);
 
     expectFields(readFirstCallArg(mocks.ensureChannelSetupPluginInstalled), {
       entry: catalogEntry,
       runtime,
       workspaceDir: "/tmp/workspace",
+      acknowledgeNonClawHubInstall: true,
     });
     expectFields(
       findCallArg(

@@ -115,6 +115,7 @@ export async function resolveInstallableChannelPlugin(params: {
   allowInstall?: boolean;
   prompter?: WizardPrompter;
   supports?: (plugin: ChannelPlugin) => boolean;
+  acknowledgeNonClawHubInstall?: boolean;
 }): Promise<ResolveInstallableChannelPluginResult> {
   const supports = params.supports ?? (() => true);
   let nextCfg = params.cfg;
@@ -184,6 +185,7 @@ export async function resolveInstallableChannelPlugin(params: {
         prompter: params.prompter ?? createClackPrompter(),
         runtime: params.runtime,
         workspaceDir,
+        ...(params.acknowledgeNonClawHubInstall ? { acknowledgeNonClawHubInstall: true } : {}),
       });
       nextCfg = installResult.cfg;
       const installedPluginId = installResult.pluginId ?? resolvedPluginId;

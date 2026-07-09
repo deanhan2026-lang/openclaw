@@ -151,6 +151,7 @@ export async function updateWizardCommand(opts: UpdateWizardOptions = {}): Promi
       channel: requestedChannel ?? undefined,
       restart,
       timeout: opts.timeout,
+      ...(opts.acknowledgeNonClawHubInstall ? { acknowledgeNonClawHubInstall: true } : {}),
     });
   } catch (err) {
     defaultRuntime.error(String(err));

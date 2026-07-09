@@ -7741,10 +7741,13 @@ describe("update-cli", () => {
         durationMs: 100,
       });
 
-      await updateWizardCommand({});
+      await updateWizardCommand({ acknowledgeNonClawHubInstall: true });
 
       const call = vi.mocked(runGatewayUpdate).mock.calls[0]?.[0];
       expect(call?.channel).toBe("dev");
+      expect(runPostCorePluginConvergenceSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ acknowledgeNonClawHubInstall: true }),
+      );
     });
   });
 

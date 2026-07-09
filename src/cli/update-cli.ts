@@ -235,6 +235,11 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/update", "docs.openclaw.ai/cli/up
     .command("wizard")
     .description("Interactive update wizard")
     .option("--timeout <seconds>", "Timeout for each update step in seconds (default: 1800)")
+    .option(
+      "--acknowledge-non-clawhub-install",
+      "Acknowledge non-ClawHub plugin repair installs during post-update plugin sync",
+      false,
+    )
     .addHelpText(
       "after",
       `\n${theme.muted("Docs:")} ${formatDocsLink("/cli/update", "docs.openclaw.ai/cli/update")}\n`,
@@ -243,6 +248,9 @@ ${theme.muted("Docs:")} ${formatDocsLink("/cli/update", "docs.openclaw.ai/cli/up
       try {
         await updateWizardCommand({
           timeout: inheritedUpdateTimeout(opts, command),
+          acknowledgeNonClawHubInstall:
+            normalizeCommanderNonClawHubInstallOption(opts) ||
+            inheritedUpdateNonClawHubInstall(command),
         });
       } catch (err) {
         defaultRuntime.error(String(err));

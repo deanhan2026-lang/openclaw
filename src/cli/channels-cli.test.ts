@@ -5,18 +5,31 @@ import type { PluginPackageChannel } from "../plugins/manifest.js";
 import { mockProcessPlatform } from "../test-utils/vitest-spies.js";
 import { registerChannelsCli } from "./channels-cli.js";
 
+type ChannelsAddCommand = typeof import("../commands/channels.js").channelsAddCommand;
+
 const listBundledPackageChannelMetadataMock = vi.hoisted(() =>
   vi.fn<() => readonly PluginPackageChannel[]>(() => []),
 );
+const channelsAddCommandMock = vi.hoisted(() => vi.fn<ChannelsAddCommand>(async () => undefined));
 
 vi.mock("../plugins/bundled-package-channel-metadata.js", () => ({
   listBundledPackageChannelMetadata: listBundledPackageChannelMetadataMock,
+}));
+
+vi.mock("../commands/channels.js", () => ({
+  channelsAddCommand: channelsAddCommandMock,
 }));
 
 function getChannelAddOptionFlags(program: Command): string[] {
   const channels = program.commands.find((command) => command.name() === "channels");
   const add = channels?.commands.find((command) => command.name() === "add");
   return add?.options.map((option) => option.flags) ?? [];
+}
+
+function getChannelSubcommandOptionFlags(program: Command, name: string): string[] {
+  const channels = program.commands.find((command) => command.name() === "channels");
+  const subcommand = channels?.commands.find((command) => command.name() === name);
+  return subcommand?.options.map((option) => option.flags) ?? [];
 }
 
 describe("registerChannelsCli", () => {
@@ -77,6 +90,42 @@ describe("registerChannelsCli", () => {
     await registerChannelsCli(program);
 
     expect(getChannelAddOptionFlags(program)).toContain("--acknowledge-non-clawhub-install");
+  });
+
+  it("registers non-ClawHub acknowledgement on auto-installing channel helpers", async () => {
+    process.argv = ["node", "openclaw", "channels"];
+    const program = new Command().name("openclaw");
+
+    await registerChannelsCli(program);
+
+    expect(getChannelSubcommandOptionFlags(program, "capabilities")).toContain(
+      "--acknowledge-non-clawhub-install",
+    );
+    expect(getChannelSubcommandOptionFlags(program, "login")).toContain(
+      "--acknowledge-non-clawhub-install",
+    );
+    expect(getChannelSubcommandOptionFlags(program, "logout")).toContain(
+      "--acknowledge-non-clawhub-install",
+    );
+    expect(getChannelSubcommandOptionFlags(program, "resolve")).not.toContain(
+      "--acknowledge-non-clawhub-install",
+    );
+    expect(getChannelSubcommandOptionFlags(program, "remove")).not.toContain(
+      "--acknowledge-non-clawhub-install",
+    );
+  });
+
+  it("keeps guided channel add when only non-ClawHub acknowledgement is supplied", async () => {
+    process.argv = ["node", "openclaw", "channels", "add", "--acknowledge-non-clawhub-install"];
+    const program = new Command().name("openclaw");
+
+    await registerChannelsCli(program, process.argv);
+    await program.parseAsync(process.argv);
+
+    expect(channelsAddCommandMock).toHaveBeenCalledOnce();
+    const [opts, , params] = channelsAddCommandMock.mock.calls[0] ?? [];
+    expect(opts).toMatchObject({ acknowledgeNonClawhubInstall: true });
+    expect(params).toEqual({ hasFlags: false });
   });
 
   it("normalizes Windows launcher argv before channel-specific add option gating", async () => {

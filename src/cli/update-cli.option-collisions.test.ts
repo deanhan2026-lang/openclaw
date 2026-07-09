@@ -150,6 +150,30 @@ describe("update cli option collisions", () => {
         expect((opts as { timeout?: string } | undefined)?.timeout).toBe("13");
       },
     },
+    {
+      name: "forwards parent-captured non-ClawHub acknowledgement to `update wizard`",
+      argv: ["update", "--acknowledge-non-clawhub-install", "wizard"],
+      assert: () => {
+        expect(updateWizardCommand).toHaveBeenCalledTimes(1);
+        const opts = firstCallOptions(updateWizardCommand);
+        expect(
+          (opts as { acknowledgeNonClawHubInstall?: boolean } | undefined)
+            ?.acknowledgeNonClawHubInstall,
+        ).toBe(true);
+      },
+    },
+    {
+      name: "forwards local non-ClawHub acknowledgement to `update wizard`",
+      argv: ["update", "wizard", "--acknowledge-non-clawhub-install"],
+      assert: () => {
+        expect(updateWizardCommand).toHaveBeenCalledTimes(1);
+        const opts = firstCallOptions(updateWizardCommand);
+        expect(
+          (opts as { acknowledgeNonClawHubInstall?: boolean } | undefined)
+            ?.acknowledgeNonClawHubInstall,
+        ).toBe(true);
+      },
+    },
   ])("$name", async ({ argv, assert }) => {
     await runRegisteredCli({
       register: registerUpdateCli as (program: Command) => void,

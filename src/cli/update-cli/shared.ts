@@ -56,6 +56,7 @@ export type UpdateFinalizeOptions = {
 
 export type UpdateWizardOptions = {
   timeout?: string;
+  acknowledgeNonClawHubInstall?: boolean;
 };
 
 const INVALID_TIMEOUT_ERROR = "--timeout must be a positive integer (seconds)";
